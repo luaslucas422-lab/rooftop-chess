@@ -11,6 +11,30 @@ const { WebSocketServer } = require('ws');
 const Chess = require('./public/js/chess.js');
 const Rating = require('./public/js/rating.js');
 
+/* the app's own files, served at /chess/ */
+const PUBLIC_DIR = path.join(__dirname, 'public');
+/* the page may only run this app's own scripts (a guard in case something ever slips past the name filter) */
+const CSP = "default-src 'self'; script-src 'self'; worker-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss: https:; " +
+  "manifest-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; object-src 'none'";
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.webmanifest': 'application/manifest+json',
+  '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.txt': 'text/plain; charset=utf-8' };
+/* answer a request for /chess or /chess/... (url is the path without the query) */
+function serveApp(req, res, url) {
+  if (url === '/chess') { res.writeHead(301, { Location: '/chess/' }); res.end(); return; }
+  let rel;
+  try { rel = decodeURIComponent(url.slice('/chess/'.length)) || 'index.html'; } catch (e) { res.writeHead(400); res.end(); return; }   // a broken %-escape
+  const file = path.normalize(path.join(PUBLIC_DIR, rel));
+  if (!file.startsWith(PUBLIC_DIR + path.sep)) { res.writeHead(403); res.end(); return; }
+  fs.readFile(file, (err, body) => {
+    if (err) { res.writeHead(404, { 'Content-Type': 'text/plain' }); res.end('Not found'); return; }
+    const ext = path.extname(file);
+    const headers = { 'Content-Type': TYPES[ext] || 'application/octet-stream', 'Cache-Control': ext === '.html' || rel === 'sw.js' ? 'no-cache' : 'public, max-age=300', 'X-Content-Type-Options': 'nosniff' };
+    if (ext === '.html') { headers['Content-Security-Policy'] = CSP; headers['Referrer-Policy'] = 'no-referrer'; }
+    res.writeHead(200, headers);
+    res.end(body);
+  });
+}
+
 const TIME_CONTROLS = ['1+0', '1+1', '2+1', '3+0', '3+2', '5+0', '5+3', '10+0', '10+5', '15+10', '30+0'];
 const FIRST_MOVE_MS = 30000;      // a player who doesn't make their first move in time: game aborted
 const ABANDON_MS = 90000;         // gone this long during a game: it counts as a loss
@@ -394,6 +418,7 @@ function createChessServer(opts) {
 
   return {
     handleUpgrade(req, socket, head) { wss.handleUpgrade(req, socket, head, ws => wss.emit('connection', ws, req)); },
+    serve: serveApp,   // the app's files: call for /chess and /chess/...
     stats, store,
   };
 }

@@ -18,7 +18,7 @@ async function startServer() {
   for (let i = 0; i < 80; i++) { try { await new Promise((res, rej) => http.get('http://127.0.0.1:' + port + '/chess/', r => r.statusCode === 200 ? res() : rej()).on('error', rej)); break; } catch (e) { await wait(100); } }
   return { port, proc, stop: () => new Promise(res => { proc.once('exit', res); proc.kill(); }) };
 }
-const get = (port, url) => new Promise(res => http.get('http://127.0.0.1:' + port + url, r => { let s = ''; r.on('data', d => s += d); r.on('end', () => res([r.statusCode, s])); }));
+const get = (port, url) => new Promise(res => http.get('http://127.0.0.1:' + port + url, r => { let s = ''; r.on('data', d => s += d); r.on('end', () => res([r.statusCode, s, r.headers])); }));
 function client(port, token, name, card) {
   const ws = new WebSocket('ws://127.0.0.1:' + port + '/chess/ws');
   const inbox = [];
@@ -77,7 +77,9 @@ let S = null;
   assert.notStrictEqual((await get(P, '/chess/..%2findex.js'))[0], 200);
   // a broken %-escape must not take the server down
   assert.strictEqual((await get(P, '/chess/%E0%A4%A'))[0], 400);
-  assert.strictEqual((await get(P, '/chess/'))[0], 200);
+  const page = await get(P, '/chess/');
+  assert.strictEqual(page[0], 200);
+  assert(/script-src 'self'/.test(page[2]['content-security-policy'] || ''), 'the app page has a Content-Security-Policy');
   for (const c of [a, b, a2]) c.ws.close();
   await S.stop();
 
