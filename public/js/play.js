@@ -204,6 +204,7 @@
     drawStatus() {
       let s = '';
       if (this.over) s = '<span>' + esc(this.resultTitle()) + ' <span class="muted">· ' + esc(this.reasonText()) + '</span></span>';
+      else if (this.mode === 'online' && Net.state !== 'online') s = '<span class="warn">Reconnecting… your clock keeps running</span>';
       else if (this.mode === 'online' && this.drawOffer && this.drawOffer !== this.me) s = '<span>Your opponent offers a draw</span><button class="btn sm primary" data-act="draw">Accept</button><button class="btn sm" data-act="decline">No</button>';
       else if (this.mode === 'online' && this.online[otherC(this.me)] === false) s = '<span class="warn">Your opponent disconnected – they have 90 seconds to come back</span>';
       else if (this.mode === 'online' && this.game.history.length < 2 && this.firstDeadline) { const left = Math.max(0, Math.ceil((this.firstDeadline - performance.now()) / 1000)); s = '<span class="muted">' + (this.game.turn === this.me ? 'Your move' : 'Waiting for their first move') + (left < 25 ? ' · ' + left + 's' : '') + '</span>'; }
@@ -542,7 +543,15 @@
   Net.on('presence', m => { const c = forGame(m.id); if (!c) return; c.online[m.color] = m.online; c.draw(false); });
   Net.on('chat', m => { const c = forGame(m.id); if (c) { c.showChat(m.from, Net.chat[m.i] || ''); if (m.from !== c.me) Sound.play('notify'); } });
   Net.on('error', m => toast(m.msg));
-  Net.on('nogame', () => { if (Play.player && !Play.player.over) { Play.player.over = { over: true, winner: null, reason: 'aborted', result: '*' }; Play.player.draw(false); } });
+  Net.on('nogame', () => {
+    const c = Play.player; if (!c || c.over) return;
+    // the server no longer knows this game (it restarted): it can't be finished, so call it off
+    c.game.finish(null, 'aborted'); c.over = { over: true, winner: null, reason: 'aborted', result: '*' }; c.ended = true;
+    c.draw(false); toast('That game was interrupted (the server restarted). No rating change.', 4500);
+  });
+  // after reconnecting, make sure the server still has our game
+  Net.on('welcome', () => { const c = Play.player; if (c && !c.over) Net.raw({ t: 'sync' }); });
+  Net.on('state', () => { for (const c of new Set([Play.player, Play.current])) if (c && c.el && (c.mode === 'online')) c.drawStatus(); });
 
   root.Play = Play;
 })(typeof self !== 'undefined' ? self : this);

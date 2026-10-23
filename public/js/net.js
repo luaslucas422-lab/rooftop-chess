@@ -26,16 +26,18 @@
       ws.onopen = () => {
         retry = 0;
         const p = Store.data.profile;
-        this.raw({ t: 'hello', token: p.token, name: p.name || 'Guest', face: p.face });
+        this.raw({ t: 'hello', token: p.token, name: p.name || 'Guest', face: p.face, card: Store.data.online.card || undefined });
         clearInterval(pingT); pingT = setInterval(() => this.raw({ t: 'ping', at: Date.now() }), 20000);
       };
       ws.onmessage = e => {
         let m; try { m = JSON.parse(e.data); } catch (x) { return; }
+        if (m.t === 'p') { this.raw({ t: 'pp', i: m.i }); return; }   // the server measuring our delay
         if (m.t === 'welcome') {
           this.me = m; if (m.chat) this.chat = m.chat;
-          Store.data.online.id = m.id; Store.data.online.ratings = m.ratings; Store.save();
+          Store.data.online.id = m.id; Store.data.online.ratings = m.ratings; if (m.card) Store.data.online.card = m.card; Store.save();
           this.setState('online');
         }
+        if (m.t === 'card' && m.card) { Store.data.online.card = m.card; Store.save(); }
         if (m.t === 'me') { Store.data.online.ratings = m.ratings; Store.save(); }
         if (m.t === 'game' && m.you) this.game = m;   // (spectating sends games with you: null)
         if (m.t === 'end' && this.game && this.game.id === m.id) { this.game.over = m; }

@@ -12,12 +12,21 @@ It opens full screen like any app. Bots, puzzles, lessons and analysis work offl
 
 ## Put it online with Render (free)
 1. Sign in at render.com with GitHub.
-2. **New → Blueprint** → pick this repository (it reads `render.yaml`), or **New → Web Service** with
-   Build command `npm install` · Start command `npm start` · Instance type Free.
+2. **New → Blueprint** → pick this repository. It reads `render.yaml` and sets everything up, including `CHESS_SECRET`.
+   (Or **New → Web Service** with Build command `npm install` · Start command `npm start` · Instance type Free,
+   and add an environment variable `CHESS_SECRET` set to any long random text.)
 3. Open the link Render gives you.
 
-On the free plan the server sleeps when unused, so the first visit can take about 30 seconds.
-Online ratings are kept in Postgres when `DATABASE_URL` is set; otherwise in `chess-data.json`, which Render wipes on every redeploy.
+On the free plan the server goes to sleep after 15 minutes with nobody connected, so the first visit after that can take up to a minute.
+
+### Where ratings are kept
+Render's free plan wipes the server's files whenever it restarts or goes to sleep. So besides the server's own copy,
+each player's phone keeps a **rating card** – their ratings, signed with `CHESS_SECRET`. After a restart the phone hands the card
+back and the rating returns. Nobody can make or change a card without the secret, and a card only works for the phone it was made for.
+Keep `CHESS_SECRET` the same, or old cards stop working (ratings then start again from 1200).
+
+If you want a permanent leaderboard (it otherwise only lists people who have connected since the last restart), set `DATABASE_URL`
+to a Postgres database and ratings are stored there too. Note that Render's free Postgres databases expire after 30 days.
 
 ## What's in it
 - **Play online** – bullet, blitz and rapid (1|0 up to 30|0): matchmaking, clocks kept on the server, Glicko ratings, draw offers, rematches, preset quick chat, premoves, leaderboard.
