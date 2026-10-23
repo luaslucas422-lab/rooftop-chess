@@ -1,10 +1,9 @@
 /* Rooftop Chess – the engine's own thread, so the screen never freezes while it thinks.
    Messages in: { id, cmd: 'think' | 'bot' | 'review', fen, moves: [uci], ... }. Scores going out are from White's side. */
-importScripts('chess.js', 'engine.js', 'openings.js');
+importScripts('chess.js', 'engine.js', 'openings.js', 'botplay.js');
 const S = new Engine.Searcher(19);
 const W = (score, pos) => pos.turn === Chess.WHITE ? score : -score;
 const toSan = (pos, ucis) => { const g = new Chess.Game(pos.fen()); const out = []; for (const u of ucis) { const r = g.move(u); if (!r) break; out.push(r.san); } return out; };
-function gauss() { let u = 0, v = 0; while (!u) u = Math.random(); while (!v) v = Math.random(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
 
 self.onmessage = e => {
   const m = e.data;
@@ -24,28 +23,11 @@ function think(m) {
   postMessage({ id: m.id, type: 'done', best: r.best ? Chess.toUci(r.best) : null, depth: r.depth, nodes: r.nodes, lines: r.lines.map(l => lineOut(pos, l)) });
 }
 
-/* a bot's move. level: { depth, noise, blunder, time, book, mateSense } */
+/* a bot's move (how each bot chooses is in botplay.js) */
 function bot(m) {
   const { pos, history } = Engine.replay(m.fen, m.moves);
-  const L = m.level || {};
-  const legal = pos.legalMoves();
-  if (!legal.length) return postMessage({ id: m.id, type: 'done', best: null });
-  // play a known opening move now and then, like people do
-  if (L.book && m.sans && m.sans.length < 14 && Math.random() < L.book) {
-    const next = Openings.next(m.sans);
-    if (next.length) { const g = new Chess.Game(pos.fen()); const pick = next[Math.floor(Math.random() * next.length)]; const r = g.move(pick); if (r) return postMessage({ id: m.id, type: 'done', best: r.uci, book: true }); }
-  }
-  if (L.time) {
-    const r = S.think(pos, { time: L.time, depth: L.depth || 64, history });
-    return postMessage({ id: m.id, type: 'done', best: Chess.toUci(r.best), score: W(r.score, pos) });
-  }
-  // weaker bots: score every move a few moves deep, then pick with some human-like noise
-  const list = S.scoreMoves(pos, L.depth || 1, { history, time: 4000 });
-  if (L.mateSense && list[0].score > Engine.MATE_BOUND) return postMessage({ id: m.id, type: 'done', best: Chess.toUci(list[0].move) });
-  if (L.blunder && Math.random() < L.blunder) { const pick = list[Math.floor(Math.random() * list.length)]; return postMessage({ id: m.id, type: 'done', best: Chess.toUci(pick.move) }); }
-  let best = list[0], bs = -1e9;
-  for (const x of list) { const s = Math.max(-2500, Math.min(2500, x.score)) + gauss() * (L.noise || 0); if (s > bs) { bs = s; best = x; } }
-  postMessage({ id: m.id, type: 'done', best: Chess.toUci(best.move) });
+  const r = BotPlay.choose(S, pos, history, m.sans, m.level || {});
+  postMessage({ id: m.id, type: 'done', best: r ? r.uci : null, book: !!(r && r.book) });
 }
 
 /* Game Review: the engine's view of every position in the game */

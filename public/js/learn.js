@@ -101,7 +101,7 @@
   /* checkmate drills: you against the full-strength engine from a won position */
   function screenDrill(el, params) {
     const D = DRILLS.find(x => x.id === params.id) || DRILLS[0];
-    const ctl = new Play.GameCtl({ mode: 'bot', me: 'w', bot: { id: 'coach', name: 'Defender', rating: 2300, level: { time: 500 }, faceSvg: UI.face({ bg: '#2b2f36', skin: 0, hair: 5, style: 0, eyes: 3, mouth: 1, acc: 0 }) }, startFen: D.fen,
+    const ctl = new Play.GameCtl({ mode: 'bot', me: 'w', bot: { id: 'coach', name: 'Defender', rating: 2300, level: { nodes: 200000, time: 3000 }, faceSvg: UI.face({ bg: '#2b2f36', skin: 0, hair: 5, style: 0, eyes: 3, mouth: 1, acc: 0 }) }, startFen: D.fen,
       players: { w: { name: Store.data.profile.name || 'You', face: Store.data.profile.face }, b: { name: 'Defender', faceSvg: UI.face({ bg: '#2b2f36', skin: 0, hair: 5, style: 0, eyes: 3, mouth: 1, acc: 0 }) } } });
     ctl.drill = D;
     ctl.title = () => D.name;

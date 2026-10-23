@@ -2,7 +2,7 @@
    Files are fetched fresh whenever there's a connection, so updates show up on their own. */
 const VERSION = 'rc-1.0.0';
 const FILES = ['./', 'index.html', 'app.css', 'manifest.webmanifest', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
-  'js/chess.js', 'js/engine.js', 'js/engine-worker.js', 'js/openings.js', 'js/rating.js', 'js/pieces.js', 'js/puzzles.js', 'js/sound.js', 'js/board.js',
+  'js/chess.js', 'js/engine.js', 'js/engine-worker.js', 'js/botplay.js', 'js/openings.js', 'js/rating.js', 'js/pieces.js', 'js/puzzles.js', 'js/sound.js', 'js/board.js',
   'js/core.js', 'js/net.js', 'js/play.js', 'js/puzzle-ui.js', 'js/analysis.js', 'js/learn.js', 'js/app.js'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(VERSION).then(c => c.addAll(FILES)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(k => k !== VERSION).map(k => caches.delete(k)))).then(() => self.clients.claim())); });

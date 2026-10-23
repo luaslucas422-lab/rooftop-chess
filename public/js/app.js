@@ -8,7 +8,7 @@
   const tcText = t => t.replace('+', ' | ');
   const catOf = t => { const [b, i] = t.split('+').map(Number); return Rating.category(b * 60, i); };
   const S = () => Store.data.settings;
-  const FULL = new Set(['game', 'puzzle', 'rush', 'analysis', 'review', 'lesson', 'drill']);
+  const FULL = new Set(['game', 'puzzle', 'rush', 'analysis', 'review', 'lesson', 'drill', 'editor']);
   const TAB_OF = { home: 'home', online: 'home', friend: 'home', bots: 'home', local: 'home', puzzles: 'puzzles', learn: 'learn', watch: 'watch', profile: 'profile', settings: 'profile', leaders: 'profile', games: 'profile' };
   let cleanup = null, current = { route: 'home', params: {} }, installEvt = null;
 
@@ -390,7 +390,7 @@
     game: (el) => Play.screen(el),
     puzzles: el => Puzzles.screenHome(el), puzzle: (el, p) => Puzzles.screenSolve(el, p), rush: el => Puzzles.screenRush(el),
     learn: el => Learn.screenLearn(el), lesson: (el, p) => Learn.screenLesson(el, p), drill: (el, p) => Learn.screenDrill(el, p),
-    analysis: (el, p) => Analysis.screenAnalysis(el, p), review: (el, p) => Analysis.screenReview(el, p),
+    analysis: (el, p) => Analysis.screenAnalysis(el, p), review: (el, p) => Analysis.screenReview(el, p), editor: (el, p) => Analysis.screenEditor(el, p),
   };
 
   /* ---------- start ---------- */

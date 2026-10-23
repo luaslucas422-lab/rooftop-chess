@@ -23,8 +23,9 @@
   class Board {
     constructor(el, opts) {
       this.el = el;
-      this.o = Object.assign({ orientation: 'w', coords: true, showDests: true, animMs: 200, autoQueen: false, premoves: true,
-        onMove: null, onPremove: null, onSelect: null, premoveDests: null }, opts || {});
+      this.o = Object.assign({ orientation: 'w', coords: true, showDests: true, animMs: 200, autoQueen: false, premoves: true, shapes: true,
+        onMove: null, onPremove: null, onSelect: null, premoveDests: null, onSquare: null }, opts || {});
+      this.userShapes = [];   // arrows and circles drawn with the right mouse button: { from, to } (to === from is a circle)
       this.orientation = this.o.orientation;
       this.pieces = new Map();   // square -> element
       this.position = new Map();
@@ -79,7 +80,12 @@
 
     /* new position. opts: { fen, lastMove: [from, to], check: square, movable, turn, dests: Map, animate } */
     set(opts) {
-      if (opts.fen != null) this.setPieces(parseFen(opts.fen), opts.animate !== false);
+      if (opts.fen != null) {
+        const placement = String(opts.fen).split(' ')[0];
+        if (placement !== this.placement && this.userShapes.length) { this.userShapes = []; this.drawArrows(); }
+        this.placement = placement;
+        this.setPieces(parseFen(opts.fen), opts.animate !== false);
+      }
       if ('lastMove' in opts) this.lastMove = opts.lastMove;
       if ('check' in opts) this.check = opts.check;
       if ('movable' in opts) this.movable = opts.movable;
@@ -150,9 +156,16 @@
     select(sq) { this.selected = sq; this.paint(); if (this.o.onSelect) this.o.onSelect(sq); }
 
     down(e) {
-      if (e.button > 0) { if (e.button === 2) { this.clearPremove(); this.select(null); } return; }
+      if (e.button === 2) {
+        this.clearPremove(); this.select(null);
+        if (this.o.shapes) { this.shapeFrom = this.sqAt(e.clientX, e.clientY); try { this.el.setPointerCapture(e.pointerId); } catch (x) {} }
+        return;
+      }
+      if (e.button > 0) return;
       if (!this.promoLayer.hidden) return;
       const sq = this.sqAt(e.clientX, e.clientY); if (!sq) return;
+      if (this.o.onSquare) { this.o.onSquare(sq); return; }
+      if (this.userShapes.length) { this.userShapes = []; this.drawArrows(); }
       const code = this.position.get(sq);
       if (this.selected && this.selected !== sq && this.destsFor(this.selected).includes(sq)) { this.go(this.selected, sq, false); return; }
       if (this.premove && !this.myColor(code)) { this.clearPremove(); }
@@ -178,6 +191,12 @@
       if (over !== this.hover) { if (this.hover) this.squares[this.hover].classList.remove('hover'); this.hover = over; if (over) this.squares[over].classList.add('hover'); }
     }
     up(e) {
+      if (e.button === 2 && this.shapeFrom) {
+        const from = this.shapeFrom, to = this.sqAt(e.clientX, e.clientY) || from; this.shapeFrom = null;
+        const i = this.userShapes.findIndex(x => x.from === from && x.to === to);
+        if (i >= 0) this.userShapes.splice(i, 1); else this.userShapes.push({ from, to });
+        this.drawArrows(); return;
+      }
       const d = this.drag; if (!d || e.pointerId !== d.id) return;
       this.drag = null;
       if (this.hover) { this.squares[this.hover].classList.remove('hover'); this.hover = null; }
@@ -243,6 +262,14 @@
         s += '<path d="M' + (sx + px * w / 2) + ' ' + (sy + py * w / 2) + 'L' + (ex + px * w / 2) + ' ' + (ey + py * w / 2) + 'L' + (ex + px * w * 1.6) + ' ' + (ey + py * w * 1.6) +
           'L' + cx2 + ' ' + cy2 + 'L' + (ex - px * w * 1.6) + ' ' + (ey - py * w * 1.6) + 'L' + (ex - px * w / 2) + ' ' + (ey - py * w / 2) + 'L' + (sx - px * w / 2) + ' ' + (sy - py * w / 2) + 'Z" fill="' + color + '" opacity="' + (a.opacity || (i ? 0.6 : 0.9)) + '"/>';
       });
+      // the user's own arrows and circles
+      for (const u of this.userShapes) {
+        if (u.from === u.to) { const [x, y] = this.xy(u.from); s += '<circle cx="' + (x + 0.5) + '" cy="' + (y + 0.5) + '" r="0.44" fill="none" stroke="rgba(235,97,80,.9)" stroke-width="0.08"/>'; continue; }
+        const [x1, y1] = this.xy(u.from), [x2, y2] = this.xy(u.to), cx1 = x1 + 0.5, cy1 = y1 + 0.5, cx2 = x2 + 0.5, cy2 = y2 + 0.5;
+        const dx = cx2 - cx1, dy = cy2 - cy1, len = Math.hypot(dx, dy) || 1, ux = dx / len, uy = dy / len, w = 0.15, ex = cx2 - ux * 0.42, ey = cy2 - uy * 0.42, sx = cx1 + ux * 0.2, sy = cy1 + uy * 0.2, px = -uy, py = ux;
+        s += '<path d="M' + (sx + px * w / 2) + ' ' + (sy + py * w / 2) + 'L' + (ex + px * w / 2) + ' ' + (ey + py * w / 2) + 'L' + (ex + px * w * 1.6) + ' ' + (ey + py * w * 1.6) + 'L' + cx2 + ' ' + cy2 +
+          'L' + (ex - px * w * 1.6) + ' ' + (ey - py * w * 1.6) + 'L' + (ex - px * w / 2) + ' ' + (ey - py * w / 2) + 'L' + (sx - px * w / 2) + ' ' + (sy - py * w / 2) + 'Z" fill="rgba(235,97,80,.85)"/>';
+      }
       this.arrowLayer.innerHTML = s;
     }
     /* small icon in a square's corner (Game Review): { sq, cls, text } */

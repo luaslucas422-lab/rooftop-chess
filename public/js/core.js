@@ -141,17 +141,17 @@
 
   /* ---------- the bots ---------- */
   const BOTS = [
-    { id: 'pip', name: 'Pip', rating: 250, blurb: 'Just learned how the horsey moves. Thinks every piece is a snack.', face: { bg: 5, skin: 0, hair: 3, style: 3, eyes: 2, mouth: 3, acc: 0 }, level: { depth: 1, noise: 320, blunder: 0.3 } },
-    { id: 'juniper', name: 'Juniper', rating: 400, blurb: 'Plays fast, loves attacking, forgets to defend.', face: { bg: 1, skin: 1, hair: 2, style: 2, eyes: 0, mouth: 0, acc: 5 }, level: { depth: 1, noise: 190, blunder: 0.12, book: 0.3 } },
-    { id: 'otto', name: 'Otto', rating: 600, blurb: 'A retired postman who plays in the park every Sunday.', face: { bg: 2, skin: 0, hair: 6, style: 1, eyes: 3, mouth: 1, acc: 1 }, level: { depth: 2, noise: 140, blunder: 0.06, book: 0.5, mateSense: true } },
-    { id: 'mabel', name: 'Mabel', rating: 800, blurb: 'Knows the openings by name. The middle of the game, less so.', face: { bg: 3, skin: 2, hair: 0, style: 2, eyes: 1, mouth: 0, acc: 0 }, level: { depth: 2, noise: 95, blunder: 0.03, book: 0.65, mateSense: true } },
-    { id: 'ravi', name: 'Ravi', rating: 1000, blurb: 'School chess club captain. Spots forks from a mile away.', face: { bg: 4, skin: 3, hair: 0, style: 4, eyes: 0, mouth: 0, acc: 4 }, level: { depth: 2, noise: 60, blunder: 0.012, book: 0.75, mateSense: true } },
-    { id: 'selma', name: 'Selma', rating: 1200, blurb: 'Solid and patient. Waits for you to make the mistake.', face: { bg: 6, skin: 1, hair: 4, style: 5, eyes: 2, mouth: 1, acc: 0 }, level: { depth: 3, noise: 42, book: 0.8, mateSense: true } },
-    { id: 'hector', name: 'Hector', rating: 1400, blurb: 'Café regular. Plays the King’s Gambit and dares you to take it.', face: { bg: 7, skin: 4, hair: 1, style: 1, eyes: 3, mouth: 0, acc: 0 }, level: { depth: 3, noise: 26, book: 0.85, mateSense: true } },
-    { id: 'yuki', name: 'Yuki', rating: 1600, blurb: 'Studies endgames on the train. Will grind you down.', face: { bg: 8, skin: 5, hair: 0, style: 2, eyes: 0, mouth: 1, acc: 1 }, level: { depth: 4, noise: 16, book: 0.9, mateSense: true } },
-    { id: 'dmitri', name: 'Dmitri', rating: 1800, blurb: 'Club champion three years running. Calculates everything.', face: { bg: 10, skin: 0, hair: 5, style: 1, eyes: 3, mouth: 1, acc: 0 }, level: { time: 350, depth: 6, book: 0.9 } },
-    { id: 'wren', name: 'Wren', rating: 2000, blurb: 'A titled player who streams blitz at 3am.', face: { bg: 9, skin: 2, hair: 7, style: 5, eyes: 1, mouth: 0, acc: 4 }, level: { time: 900, depth: 9, book: 0.9 } },
-    { id: 'atlas', name: 'Atlas', rating: 2300, blurb: 'The engine at full strength. Good luck.', face: { bg: '#2b2f36', skin: 0, hair: 5, style: 0, eyes: 3, mouth: 1, acc: 3 }, level: { time: 2200, book: 0.9 } },
+    { id: 'pip', name: 'Pip', rating: 250, blurb: 'Just learned how the horsey moves. Thinks every piece is a snack.', face: { bg: 5, skin: 0, hair: 3, style: 3, eyes: 2, mouth: 3, acc: 0 }, level: BotPlay.LEVELS.pip },
+    { id: 'juniper', name: 'Juniper', rating: 400, blurb: 'Plays fast, loves attacking, forgets to defend.', face: { bg: 1, skin: 1, hair: 2, style: 2, eyes: 0, mouth: 0, acc: 5 }, level: BotPlay.LEVELS.juniper },
+    { id: 'otto', name: 'Otto', rating: 600, blurb: 'A retired postman who plays in the park every Sunday.', face: { bg: 2, skin: 0, hair: 6, style: 1, eyes: 3, mouth: 1, acc: 1 }, level: BotPlay.LEVELS.otto },
+    { id: 'mabel', name: 'Mabel', rating: 800, blurb: 'Knows the openings by name. The middle of the game, less so.', face: { bg: 3, skin: 2, hair: 0, style: 2, eyes: 1, mouth: 0, acc: 0 }, level: BotPlay.LEVELS.mabel },
+    { id: 'ravi', name: 'Ravi', rating: 1000, blurb: 'School chess club captain. Spots forks from a mile away.', face: { bg: 4, skin: 3, hair: 0, style: 4, eyes: 0, mouth: 0, acc: 4 }, level: BotPlay.LEVELS.ravi },
+    { id: 'selma', name: 'Selma', rating: 1200, blurb: 'Solid and patient. Waits for you to make the mistake.', face: { bg: 6, skin: 1, hair: 4, style: 5, eyes: 2, mouth: 1, acc: 0 }, level: BotPlay.LEVELS.selma },
+    { id: 'hector', name: 'Hector', rating: 1400, blurb: 'Café regular. Plays the King’s Gambit and dares you to take it.', face: { bg: 7, skin: 4, hair: 1, style: 1, eyes: 3, mouth: 0, acc: 0 }, level: BotPlay.LEVELS.hector },
+    { id: 'yuki', name: 'Yuki', rating: 1600, blurb: 'Studies endgames on the train. Will grind you down.', face: { bg: 8, skin: 5, hair: 0, style: 2, eyes: 0, mouth: 1, acc: 1 }, level: BotPlay.LEVELS.yuki },
+    { id: 'dmitri', name: 'Dmitri', rating: 1800, blurb: 'Club champion three years running. Calculates everything.', face: { bg: 10, skin: 0, hair: 5, style: 1, eyes: 3, mouth: 1, acc: 0 }, level: BotPlay.LEVELS.dmitri },
+    { id: 'wren', name: 'Wren', rating: 2000, blurb: 'A titled player who streams blitz at 3am.', face: { bg: 9, skin: 2, hair: 7, style: 5, eyes: 1, mouth: 0, acc: 4 }, level: BotPlay.LEVELS.wren },
+    { id: 'atlas', name: 'Atlas', rating: 2300, blurb: 'The engine at full strength. Good luck.', face: { bg: '#2b2f36', skin: 0, hair: 5, style: 0, eyes: 3, mouth: 1, acc: 3 }, level: BotPlay.LEVELS.atlas },
   ];
   for (const b of BOTS) { b.faceSvg = face(b.face); b.isBot = true; }
 

@@ -265,7 +265,7 @@
       const res = await engine('bot').request('bot', { fen: this.game.startFen, moves: this.ucis, sans: this.sans, level: L });
       if (token !== this.token || this.over) return;
       // people take a moment to move – the weaker bots don't snap back instantly either
-      const want = L.time ? 250 : 450 + Math.random() * 700;
+      const want = L.time || L.nodes ? 250 : 450 + Math.random() * 700;
       const wait = Math.max(0, want - (performance.now() - t0));
       await new Promise(r => setTimeout(r, wait));
       if (token !== this.token || this.over) return;

@@ -30,8 +30,8 @@
     let orientation = params.flip ? 'b' : 'w', engineOn = Store.data.settings.evalBar !== false, lastInfo = null;
     el.innerHTML = '<div class="gv with-eval"><div class="topbar"><button class="iconbtn" data-a="back" aria-label="Back">' + icon('back') + '</button><h2>Analysis</h2><button class="iconbtn" data-a="menu" aria-label="Menu">' + icon('menu') + '</button></div>' +
       '<div class="gv-main"><div class="gv-wrap"><div class="gv-boardrow">' + evalBarHtml() + '<div class="board"></div></div></div>' +
-      '<div class="lines"></div><div class="opening"></div><div class="moves"></div><div class="navbtns"></div></div>' +
-      '<div class="gv-side"><div class="side-head"><h3>Analysis</h3><button class="iconbtn" data-a="menu" aria-label="Menu">' + icon('menu') + '</button></div><div class="lines"></div><div class="opening"></div><div class="moves"></div><div class="navbtns"></div></div></div>';
+      '<div class="lines"></div><div class="opening"></div><div class="book"></div><div class="moves"></div><div class="navbtns"></div></div>' +
+      '<div class="gv-side"><div class="side-head"><h3>Analysis</h3><button class="iconbtn" data-a="menu" aria-label="Menu">' + icon('menu') + '</button></div><div class="lines"></div><div class="opening"></div><div class="book"></div><div class="moves"></div><div class="navbtns"></div></div></div>';
     const s = Store.data.settings;
     const board = new Board($('.board', el), { orientation, coords: s.coords, showDests: s.dests, autoQueen: s.autoQueen, animMs: s.anim, onMove: (f, t, p) => move(f, t, p) });
     const eng = engine('analysis');
@@ -60,6 +60,9 @@
       if (!g.history.length) html = '<span class="faint small" style="padding:4px 8px">Move pieces for either side</span>';
       for (const m of $$('.moves', el)) { m.innerHTML = html; const c = $('.cur', m); if (c) { if (getComputedStyle(m).display === 'grid') c.scrollIntoView({ block: 'nearest' }); else m.scrollLeft = c.offsetLeft - m.clientWidth / 2; } }
       for (const o of $$('.opening', el)) o.textContent = Openings.name(g.history.slice(0, ply).map(h => h.san));
+      // the opening explorer: known moves from here
+      const book = g.startFen === Chess.START_FEN ? Openings.next(g.history.slice(0, ply).map(h => h.san)) : [];
+      for (const b of $$('.book', el)) b.innerHTML = book.length ? '<span class="tiny muted">Book</span>' + book.map(m => '<button class="chip" data-book="' + esc(m) + '">' + esc(m) + '</button>').join('') : '';
       for (const n of $$('.navbtns', el)) n.innerHTML = ['first', 'prev', 'flip', 'next', 'last'].map(k => '<button data-a="' + k + '" aria-label="' + k + '">' + icon(k) + '</button>').join('') +
         '<button data-a="engine" aria-label="Engine" style="' + (engineOn ? 'color:var(--accent)' : '') + '">' + icon('robot') + '</button>';
       const st = view.status();
@@ -84,6 +87,8 @@
     }
     el.addEventListener('click', e => {
       const m = e.target.closest('[data-ply]'); if (m) { ply = +m.dataset.ply; return draw(); }
+      const bk = e.target.closest('[data-book]');
+      if (bk) { const t = new Chess.Game(fenAt(ply)), mv = t.find(bk.dataset.book); if (mv != null) move(Chess.sqName(Chess.mFrom(mv)), Chess.sqName(Chess.mTo(mv)), Chess.mFlags(mv) & Chess.F_PROMO ? Chess.LETTERS[Chess.mPromo(mv)] : null); return; }
       const b = e.target.closest('[data-a]'); if (!b) return;
       const a = b.dataset.a;
       if (a === 'back') return history.length > 1 ? history.back() : App.go('home');
@@ -95,7 +100,7 @@
       draw();
     });
     function menu() {
-      const s = sheet('<h3>Analysis</h3>' + [['import', 'copy', 'Load PGN or FEN'], ['pgn', 'copy', 'Copy PGN'], ['fen', 'copy', 'Copy position (FEN)'], ['review', 'review', 'Game Review of these moves'], ['play', 'robot', 'Play from here vs a bot'], ['reset', 'undo', 'New board']]
+      const s = sheet('<h3>Analysis</h3>' + [['editor', 'flip', 'Set up a position'], ['import', 'copy', 'Load PGN or FEN'], ['pgn', 'copy', 'Copy PGN'], ['fen', 'copy', 'Copy position (FEN)'], ['review', 'review', 'Game Review of these moves'], ['play', 'robot', 'Play from here vs a bot'], ['reset', 'undo', 'New board']]
         .map(([k, ic, t]) => '<button class="menu-item" data-k="' + k + '">' + icon(ic) + t + '</button>').join(''));
       s.addEventListener('click', e => {
         const b = e.target.closest('[data-k]'); if (!b) return; s.close();
@@ -105,6 +110,7 @@
         if (k === 'reset') { g = new Chess.Game(); ply = 0; draw(); }
         if (k === 'review') { if (g.history.length < 2) return toast('Play a few moves first'); App.go('review', { pgn: g.pgn() }); }
         if (k === 'play') App.go('bots', { startFen: fenAt(ply) });
+        if (k === 'editor') App.go('editor', { fen: fenAt(ply) });
         if (k === 'import') importSheet();
       });
     }
@@ -121,6 +127,66 @@
     }
     draw();
     return () => eng.stop();
+  }
+
+  /* ---------- set up a position ---------- */
+  const PALETTE = ['K', 'Q', 'R', 'B', 'N', 'P'];
+  function screenEditor(el, params) {
+    let map = Board.parseFen(params.fen || Chess.START_FEN), turn = (params.fen || '').split(' ')[1] === 'b' ? 'b' : 'w', orientation = 'w', tool = 'wP';
+    el.innerHTML = '<div class="gv"><div class="topbar"><button class="iconbtn" data-a="back" aria-label="Back">' + icon('back') + '</button><h2>Set up a position</h2></div>' +
+      '<div class="gv-main"><div class="palette" data-color="b"></div><div class="gv-wrap"><div class="gv-boardrow"><div class="board"></div></div></div><div class="palette" data-color="w"></div>' +
+      '<div class="editor-controls"></div></div><div class="gv-side"><div class="side-head"><h3>Set up a position</h3></div><div class="editor-controls"></div></div></div>';
+    const board = new Board($('.board', el), { coords: Store.data.settings.coords, animMs: 0, shapes: false, onSquare: sq => place(sq) });
+    function place(sq) {
+      if (tool === 'x' || map.get(sq) === tool) map.delete(sq);
+      else {
+        if (tool[1] === 'K') for (const [s, c] of map) if (c === tool) map.delete(s);   // one king each
+        map.set(sq, tool);
+      }
+      draw();
+    }
+    function castling() {
+      const at = (s, c) => map.get(s) === c;
+      return ((at('e1', 'wK') && at('h1', 'wR') ? 'K' : '') + (at('e1', 'wK') && at('a1', 'wR') ? 'Q' : '') + (at('e8', 'bK') && at('h8', 'bR') ? 'k' : '') + (at('e8', 'bK') && at('a8', 'bR') ? 'q' : '')) || '-';
+    }
+    function fen() {
+      let out = '';
+      for (let r = 8; r >= 1; r--) { let e = 0; for (const f of 'abcdefgh') { const c = map.get(f + r); if (!c) { e++; continue; } if (e) { out += e; e = 0; } out += c[0] === 'w' ? c[1] : c[1].toLowerCase(); } if (e) out += e; if (r > 1) out += '/'; }
+      return out + ' ' + turn + ' ' + castling() + ' - 0 1';
+    }
+    function problem() { try { const p = new Chess.Position(fen()); const why = p.problem(); if (why) return why; if (!new Chess.Game(fen()).moves().length) return 'The side to move has no moves (it’s already mate or stalemate)'; return null; } catch (e) { return e.message.replace('Bad FEN: ', ''); } }
+    function draw() {
+      board.setOrientation(orientation);
+      board.set({ fen: fen(), animate: false, movable: null });
+      for (const p of $$('.palette', el)) {
+        const c = p.dataset.color;
+        p.innerHTML = PALETTE.map(t => '<button data-tool="' + c + t + '" class="' + (tool === c + t ? 'on' : '') + '" style="background-image:url(\'' + PIECES.url(c + t) + '\')" aria-label="' + (c === 'w' ? 'White ' : 'Black ') + t + '"></button>').join('') +
+          (c === 'w' ? '<button data-tool="x" class="erase' + (tool === 'x' ? ' on' : '') + '" aria-label="Eraser">✕</button>' : '');
+      }
+      const why = problem();
+      const ctl = '<div class="seg" style="margin:8px 0">' + [['w', 'White to move'], ['b', 'Black to move']].map(([k, n]) => '<button data-turn="' + k + '" class="' + (turn === k ? 'on' : '') + '">' + n + '</button>').join('') + '</div>' +
+        '<div class="row gap wrap" style="margin-bottom:8px"><button class="btn sm" data-a="start">Starting position</button><button class="btn sm" data-a="clear">Clear</button><button class="btn sm" data-a="flip">Flip</button></div>' +
+        '<input class="field" id="edfen" spellcheck="false" autocomplete="off" value="' + esc(fen()) + '" style="font:12px ui-monospace,monospace">' +
+        '<p class="small ' + (why ? 'bad' : 'muted') + '" style="margin:8px 2px">' + (why ? esc(why) : 'Castling: ' + (castling() === '-' ? 'none' : castling()) + ' (set by where the kings and rooks stand)') + '</p>' +
+        '<div class="row gap wrap"><button class="btn primary sm" data-a="analyze"' + (why ? ' disabled' : '') + '>' + icon('chart') + ' Analyze</button><button class="btn sm" data-a="bot"' + (why ? ' disabled' : '') + '>' + icon('robot') + ' Play a bot</button><button class="btn sm" data-a="local"' + (why ? ' disabled' : '') + '>' + icon('flip') + ' Pass & play</button></div>';
+      for (const c of $$('.editor-controls', el)) c.innerHTML = ctl;
+      for (const i of $$('#edfen', el)) i.onchange = () => { try { const p = new Chess.Position(i.value.trim()); map = Board.parseFen(p.fen()); turn = p.turn ? 'b' : 'w'; } catch (e) { toast(e.message.replace('Bad FEN: ', 'That FEN doesn’t work: ')); } draw(); };
+    }
+    el.addEventListener('click', e => {
+      const t = e.target.closest('[data-tool]'); if (t) { tool = t.dataset.tool; return draw(); }
+      const tn = e.target.closest('[data-turn]'); if (tn) { turn = tn.dataset.turn; return draw(); }
+      const b = e.target.closest('[data-a]'); if (!b || b.disabled) return;
+      const a = b.dataset.a;
+      if (a === 'back') return history.length > 1 ? history.back() : App.go('analysis');
+      if (a === 'start') { map = Board.parseFen(Chess.START_FEN); turn = 'w'; }
+      if (a === 'clear') { map = new Map([['e1', 'wK'], ['e8', 'bK']]); }
+      if (a === 'flip') orientation = orientation === 'w' ? 'b' : 'w';
+      if (a === 'analyze') return App.go('analysis', { fen: fen(), flip: orientation === 'b' });
+      if (a === 'bot') return App.go('bots', { startFen: fen() });
+      if (a === 'local') return Play.startLocal({ startFen: fen() });
+      draw();
+    });
+    draw();
   }
 
   /* ---------- Game Review ---------- */
@@ -215,8 +281,8 @@
       const s = Store.data.settings;
       el.innerHTML = '<div class="gv with-eval review"><div class="topbar"><button class="iconbtn" data-a="back" aria-label="Back">' + icon('back') + '</button><h2>Game Review</h2><button class="iconbtn" data-a="analysis" aria-label="Analysis">' + icon('chart') + '</button></div>' +
         '<div class="gv-main"><div class="gv-wrap"><div class="pbar" data-side="top"></div><div class="gv-boardrow">' + evalBarHtml() + '<div class="board"></div></div><div class="pbar" data-side="bottom"></div></div>' +
-        '<div class="coach"></div><div class="navbtns"></div><div style="width:100%;padding:0 10px"><svg class="graph"></svg></div><div class="sum" style="width:100%;padding:10px"></div></div>' +
-        '<div class="gv-side"><div class="side-head"><h3>Game Review</h3><button class="iconbtn" data-a="analysis" aria-label="Analysis">' + icon('chart') + '</button></div><div class="coach"></div><div class="navbtns"></div><div style="padding:0 10px"><svg class="graph"></svg></div><div class="sum" style="padding:10px;overflow-y:auto"></div></div></div>';
+        '<div class="coach"></div><div class="review-acts"></div><div class="navbtns"></div><div style="width:100%;padding:0 10px"><svg class="graph"></svg></div><div class="sum" style="width:100%;padding:10px"></div></div>' +
+        '<div class="gv-side"><div class="side-head"><h3>Game Review</h3><button class="iconbtn" data-a="analysis" aria-label="Analysis">' + icon('chart') + '</button></div><div class="coach"></div><div class="review-acts"></div><div class="navbtns"></div><div style="padding:0 10px"><svg class="graph"></svg></div><div class="sum" style="padding:10px;overflow-y:auto"></div></div></div>';
       el.querySelector('.gv').style.height = 'auto';
       board = new Board($('.board', el), { orientation, coords: s.coords, showDests: false, animMs: s.anim });
       drawSummary(); draw();
@@ -251,9 +317,26 @@
       }
     }
     function sanOf(fen, uci) { if (!uci) return ''; const t = new Chess.Game(fen); const r = t.move(uci); return r ? r.san : uci; }
+    const KEY = ['brilliant', 'great', 'mistake', 'miss', 'blunder'];
+    const keyPlies = () => cl.map((c, i) => KEY.includes(c.cls) ? i + 1 : 0).filter(Boolean);
+    const BAD = ['inaccuracy', 'mistake', 'miss', 'blunder'];
+    let mode = 'review', retry = null, line = null;   // mode: review | retry | line
+    const coachFace = () => '<span class="av" style="width:38px;height:38px">' + UI.face({ bg: '#2f6fd6', skin: 1, hair: 0, style: 1, eyes: 2, mouth: 0, acc: 1 }) + '</span>';
+    const setCoach = html => { for (const x of $$('.coach', el)) x.innerHTML = coachFace() + '<div class="bubble">' + html + '</div>'; };
+    const setActs = html => { for (const x of $$('.review-acts', el)) x.innerHTML = html; };
+    const setNav = keys => { for (const n of $$('.navbtns', el)) n.innerHTML = keys.map(k => '<button data-a="' + k + '" aria-label="' + k + '">' + icon(k) + '</button>').join(''); };
+    function moveText(fen, ucis, cur) {
+      const t = new Chess.Game(fen), num = t.pos.fullmove, black = t.pos.turn === 1; let out = '';
+      ucis.forEach((u, i) => { const r = t.move(u); if (!r) return; const k = i + (black ? 1 : 0);
+        out += (k % 2 === 0 ? (num + k / 2) + '. ' : i === 0 ? num + '… ' : '') + (i === cur ? '<b style="color:var(--accent)">' + esc(r.san) + '</b>' : esc(r.san)) + ' '; });
+      return out.trim();
+    }
     function draw() {
+      if (mode === 'retry') return drawRetry();
+      if (mode === 'line') return drawLine();
       const fen = ply === 0 ? g.startFen : g.history[ply - 1].fen, last = ply ? g.history[ply - 1] : null, c = ply ? cl[ply - 1] : null;
       const view = new Chess.Game(fen);
+      board.o.showDests = false; board.o.onMove = null;
       board.set({ fen, lastMove: last ? [last.from, last.to] : null, check: view.inCheck() ? Chess.sqName(view.pos.kings[view.pos.turn]) : null, movable: null });
       board.setBadge(c ? { sq: last.to, cls: '', text: CLS[c.cls].sym } : null);
       const badge = $('.badge', el); if (badge && c) badge.style.background = CLS[c.cls].color;
@@ -266,8 +349,10 @@
       bars(fen);
       // what the coach says
       let msg;
-      if (!c) msg = '<b>Let’s look at your game.</b> Tap → to go through it move by move. ' + (sum[me] ? 'Your accuracy was <b>' + sum[me].acc.toFixed(1) + '</b>.' : '');
-      else {
+      if (!c) {
+        const k = keyPlies().length;
+        msg = '<b>Let’s look at your game.</b> ' + (sum[me] ? 'Your accuracy was <b>' + sum[me].acc.toFixed(1) + '</b>. ' : '') + (k ? 'There ' + (k === 1 ? 'is 1 key moment' : 'are ' + k + ' key moments') + ' – jump between them, or step through every move.' : 'Step through it move by move.');
+      } else {
         const info = CLS[c.cls], san = esc(last.san), bestSan = esc(sanOf(last.fenBefore, c.best)), e = evals[ply];
         const article = /^[aeiou]/i.test(info.name) ? 'an' : 'a';
         msg = '<span class="cls-dot" style="background:' + info.color + '">' + info.sym + '</span><b>' + san + '</b> ';
@@ -280,34 +365,133 @@
         else {
           msg += 'is ' + article + ' ' + info.name.toLowerCase() + '. ';
           if (e.mate && Math.sign(e.mate) !== (c.color === 'w' ? 1 : -1)) msg += 'It allows mate in ' + Math.abs(e.mate) + '. ';
-          else if (c.wpB > 65 && c.wpA < 55) msg += 'It throws away your advantage. ';
-          else if (c.wpB > 40 && c.wpA < 25) msg += 'Now you’re in trouble. ';
+          else if (c.wpB > 65 && c.wpA < 55) msg += 'It throws away the advantage. ';
+          else if (c.wpB > 40 && c.wpA < 25) msg += 'Now it’s a struggle. ';
           if (bestSan) msg += 'Best was <b>' + bestSan + '</b>.';
         }
         msg += ' <span class="muted">(' + esc(evalText(e)) + ')</span>';
       }
-      for (const x of $$('.coach', el)) x.innerHTML = '<span class="av" style="width:38px;height:38px">' + UI.face({ bg: '#2f6fd6', skin: 1, hair: 0, style: 1, eyes: 2, mouth: 0, acc: 1 }) + '</span><div class="bubble">' + msg + '</div>';
-      for (const n of $$('.navbtns', el)) n.innerHTML = ['first', 'prev', 'flip', 'next', 'last'].map(k => '<button data-a="' + k + '" aria-label="' + k + '">' + icon(k) + '</button>').join('') +
-        (c && c.best && c.best !== last.uci ? '<button data-a="retry" aria-label="Show best">' + icon('hint') + '</button>' : '');
+      setCoach(msg);
+      const keys = keyPlies(), prevKey = keys.filter(k => k < ply).pop(), nextKey = keys.find(k => k > ply);
+      const from = ply ? ply - 1 : 0, bestLine = evals[from] && evals[from].lines && evals[from].lines[0];
+      setActs((prevKey ? '<button class="btn sm" data-a="pkey">◀ Key moment</button>' : '') +
+        (c && BAD.includes(c.cls) && c.best ? '<button class="btn sm primary" data-a="retry">Retry this move</button>' : '') +
+        (bestLine && bestLine.pv && bestLine.pv.length ? '<button class="btn sm" data-a="line">' + (c && c.best && c.best !== last.uci ? 'Show best line' : 'Engine line') + '</button>' : '') +
+        (nextKey ? '<button class="btn sm" data-a="nkey">Key moment ▶</button>' : ''));
+      setNav(['first', 'prev', 'flip', 'next', 'last']);
       drawGraph();
     }
+
+    /* try to find a better move than the one played */
+    function startRetry() {
+      const c = cl[ply - 1], rec = g.history[ply - 1];
+      retry = { ply, fen: rec.fenBefore, color: rec.color, best: c.best, wpB: c.wpB, tries: 0, done: false, played: rec.uci, msg: '' };
+      mode = 'retry'; draw();
+    }
+    function retryDests() {
+      const t = new Chess.Game(retry.fen), dests = new Map();
+      for (const m of t.moves()) { if (!dests.has(m.from)) dests.set(m.from, []); dests.get(m.from).push(m.to); }
+      return dests;
+    }
+    function drawRetry() {
+      const after = retry.after, fen = after ? after.fen : retry.fen, t = new Chess.Game(fen);
+      board.o.showDests = Store.data.settings.dests; board.o.autoQueen = Store.data.settings.autoQueen;
+      board.o.onMove = (f, to, promo) => tryMove(f, to, promo);
+      board.set({ fen, lastMove: after ? after.last : null, check: t.inCheck() ? Chess.sqName(t.pos.kings[t.pos.turn]) : null, movable: retry.done ? null : retry.color, turn: retry.color, dests: retry.done ? new Map() : retryDests() });
+      board.setBadge(null); board.setArrows([]);
+      board.setMarks(after ? { [after.last[1]]: 'good' } : {});
+      setEvalBar($('.evalbar', el), evals[retry.ply - 1], orientation);
+      bars(retry.fen);
+      setCoach(retry.msg || '<b>Your turn.</b> ' + (retry.color === 'w' ? 'White' : 'Black') + ' played <b>' + esc(sanOf(retry.fen, retry.played)) + '</b> here. Can you find something better?');
+      setActs('<button class="btn sm" data-a="exit">Back to review</button>' + (!retry.done && retry.tries ? '<button class="btn sm" data-a="answer">Show the answer</button>' : '') +
+        (retry.done && keyPlies().find(k => k > retry.ply) ? '<button class="btn sm primary" data-a="nkey">Next key moment ▶</button>' : ''));
+      setNav([]);
+    }
+    async function tryMove(from, to, promo) {
+      if (!retry || retry.done || retry.busy) return false;
+      const t = new Chess.Game(retry.fen), rec = t.move({ from, to, promo: promo || 'q' });
+      if (!rec) return false;
+      Sound.forMove(rec);
+      board.set({ fen: t.fen(), lastMove: [rec.from, rec.to], movable: null });
+      retry.tries++;
+      let ok = rec.uci === retry.best, note = '';
+      if (rec.uci === retry.played) { ok = false; note = 'That’s the move from the game. '; }
+      else if (!ok) {
+        // not the engine's first choice – maybe it's just as good
+        retry.busy = true; setCoach('Checking <b>' + esc(rec.san) + '</b>…');
+        const st = t.status();
+        let wp;
+        if (st.over) wp = st.winner === retry.color ? 100 : st.winner ? 0 : 50;
+        else { const r = await eng.request('think', { fen: t.fen(), moves: [], time: 500 }); const e = r && r.lines[0] ? r.lines[0] : { score: 0, mate: 0 }; wp = winPct((retry.color === 'w' ? 1 : -1) * cpOf(e)); }
+        retry.busy = false;
+        if (mode !== 'retry') return true;
+        ok = retry.wpB - wp < 4;
+      }
+      if (ok) {
+        retry.done = true; Sound.play('correct');
+        retry.msg = '<span class="cls-dot" style="background:' + CLS.best.color + '">✓</span><b>' + esc(rec.san) + '</b> – ' + (rec.uci === retry.best ? 'that’s the best move!' : 'that works just as well!');
+        retry.after = { fen: t.fen(), last: [rec.from, rec.to] }; drawRetry();
+      } else {
+        Sound.play('wrong');
+        retry.msg = '<span class="cls-dot" style="background:' + CLS.mistake.color + '">✕</span>' + note + '<b>' + esc(rec.san) + '</b> isn’t it. Try again!';
+        board.setMarks({ [rec.to]: 'bad' }); setCoach(retry.msg);
+        setTimeout(() => { if (mode === 'retry' && !retry.done) drawRetry(); }, 750);
+      }
+      return true;
+    }
+
+    /* step through the engine's best line */
+    function startLine() {
+      const from = ply ? ply - 1 : 0, L = evals[from].lines[0];
+      line = { fen: ply ? g.history[ply - 1].fenBefore : g.startFen, ucis: L.pv.slice(0, 12), idx: 0, back: ply };
+      mode = 'line'; draw();
+    }
+    function drawLine() {
+      const t = new Chess.Game(line.fen); let last = null;
+      for (let i = 0; i < line.idx; i++) last = t.move(line.ucis[i]);
+      board.o.showDests = false; board.o.onMove = null;
+      board.set({ fen: t.fen(), lastMove: last ? [last.from, last.to] : null, check: t.inCheck() ? Chess.sqName(t.pos.kings[t.pos.turn]) : null, movable: null });
+      board.setBadge(null); board.setMarks({});
+      const nx = line.ucis[line.idx];
+      board.setArrows(nx ? [{ from: nx.slice(0, 2), to: nx.slice(2, 4), color: 'rgba(92,196,107,.9)' }] : []);
+      bars(t.fen());
+      setCoach('<b>Engine line:</b> ' + moveText(line.fen, line.ucis, line.idx - 1) + (line.idx >= line.ucis.length ? '' : '<div class="small muted" style="margin-top:4px">Tap → to play it out</div>'));
+      setActs('<button class="btn sm" data-a="exit">Back to review</button>');
+      setNav(['first', 'prev', 'next', 'last']);
+    }
+
     el.addEventListener('click', e => {
       const gr = e.target.closest('.graph');
-      if (gr && evals) { const r = gr.getBoundingClientRect(); ply = Math.round((e.clientX - r.left) / r.width * (evals.length - 1)); ply = Math.max(0, Math.min(g.history.length, ply)); return draw(); }
+      if (gr && evals) { const r = gr.getBoundingClientRect(); mode = 'review'; ply = Math.round((e.clientX - r.left) / r.width * (evals.length - 1)); ply = Math.max(0, Math.min(g.history.length, ply)); return draw(); }
       const b = e.target.closest('[data-a]'); if (!b) return;
       const a = b.dataset.a;
       if (a === 'back') return history.length > 1 ? history.back() : App.go('home');
       if (!cl) return;
+      if (a === 'analysis') return App.go('analysis', { pgn: params.pgn, ply, flip: orientation === 'b' });
+      if (a === 'flip') { orientation = orientation === 'w' ? 'b' : 'w'; board.setOrientation(orientation); return draw(); }
+      if (a === 'exit') { mode = 'review'; retry = null; line = null; return draw(); }
+      if (a === 'retry') return startRetry();
+      if (a === 'line') return startLine();
+      if (a === 'answer' && retry) {
+        const t = new Chess.Game(retry.fen), r = t.move(retry.best); if (!r) return;
+        retry.done = true; retry.after = { fen: t.fen(), last: [r.from, r.to] }; Sound.forMove(r);
+        retry.msg = 'The best move was <b>' + esc(r.san) + '</b>.'; return drawRetry();
+      }
+      if (a === 'pkey' || a === 'nkey') { const keys = keyPlies(), at = mode === 'retry' && retry ? retry.ply : ply; const k = a === 'pkey' ? keys.filter(x => x < at).pop() : keys.find(x => x > at); if (k) { mode = 'review'; retry = null; ply = k; Sound.forMove(g.history[k - 1]); } return draw(); }
+      if (mode === 'line') {
+        if (a === 'first') line.idx = 0; if (a === 'last') line.idx = line.ucis.length;
+        if (a === 'prev') line.idx = Math.max(0, line.idx - 1);
+        if (a === 'next' && line.idx < line.ucis.length) { line.idx++; const t = new Chess.Game(line.fen); let r; for (let i = 0; i < line.idx; i++) r = t.move(line.ucis[i]); Sound.forMove(r); }
+        return draw();
+      }
+      if (mode !== 'review') return;
       if (a === 'first') ply = 0; if (a === 'last') ply = g.history.length;
       if (a === 'prev') ply = Math.max(0, ply - 1);
       if (a === 'next') { ply = Math.min(g.history.length, ply + 1); if (ply) Sound.forMove(g.history[ply - 1]); }
-      if (a === 'flip') { orientation = orientation === 'w' ? 'b' : 'w'; board.setOrientation(orientation); }
-      if (a === 'analysis') return App.go('analysis', { pgn: params.pgn, ply, flip: orientation === 'b' });
-      if (a === 'retry') { const c = cl[ply - 1]; const line = (evals[ply - 1].lines[0] || {}).san || []; return toast('Best line: ' + line.slice(0, 6).join(' '), 4000); }
       draw();
     });
     return () => eng.stop();
   }
 
-  root.Analysis = { screenAnalysis, screenReview, classify, summarize, winPct, CLS };
+  root.Analysis = { screenAnalysis, screenReview, screenEditor, classify, summarize, winPct, CLS };
 })(typeof self !== 'undefined' ? self : this);
