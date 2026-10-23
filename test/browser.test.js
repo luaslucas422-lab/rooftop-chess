@@ -16,7 +16,8 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 const server = spawn(process.execPath, [path.join(__dirname, '..', 'server.js')], { env: Object.assign({}, process.env, { PORT, CHESS_DATA_FILE: dataFile, CHESS_SECRET: 'browser-test', DATABASE_URL: '' }), stdio: ['ignore', 'ignore', 'inherit'] });
 
 async function page(browser, name) {
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true });
+  // bypassCSP: some Playwright versions poll with eval(), which the app's Content-Security-Policy rightly blocks
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, bypassCSP: true });
   const p = await ctx.newPage();
   p.errors = [];
   p.on('pageerror', e => p.errors.push(e.message));
@@ -84,6 +85,16 @@ async function move(p, from, to) { await tap(p, from); await wait(60); await tap
   console.log('online game ok');
 
   for (const p of [a, b]) assert.deepStrictEqual(p.errors, [], 'no page errors');
+
+  // the app itself runs under its Content-Security-Policy without breaking it
+  const strict = await (await browser.newContext({ viewport: { width: 390, height: 844 } })).newPage();
+  await strict.addInitScript(() => { window.__csp = []; document.addEventListener('securitypolicyviolation', e => window.__csp.push(e.violatedDirective + ' ' + e.blockedURI)); });
+  await strict.goto(URL); await wait(800);
+  await strict.evaluate(() => { Store.data.profile.name = 'Strict'; Play.startBot(BOTS[0], 'w'); });
+  await wait(1500);
+  await strict.evaluate(() => App.go('analysis', {})); await wait(1500);
+  assert.deepStrictEqual(await strict.evaluate(() => window.__csp), [], 'no Content-Security-Policy violations');
+  console.log('content security policy ok');
   await browser.close(); server.kill(); try { fs.unlinkSync(dataFile); } catch (e) {}
   console.log('browser ok');
   process.exit(0);
