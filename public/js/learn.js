@@ -139,12 +139,14 @@
 
   function screenLearn(el) {
     el.innerHTML = '<div class="page"><h1>Learn</h1>' +
+      '<button class="card row gap" data-withcoach style="width:100%;border:0;text-align:left;color:inherit"><span class="av" style="width:48px;height:48px">' + UI.face(Coach.FACE) + '</span><span class="grow"><b>Play with Coach Mira</b><span class="small muted" style="display:block">Play a bot while Mira explains your moves and stops you before you blunder</span></span><span class="faint">›</span></button>' +
       '<div class="section-title">How the pieces move</div><div class="tiles">' + LESSONS.map(L => '<button class="tile" data-lesson="' + L.id + '"><span class="ic" style="background:var(--card2)"><img src="' + PIECES.url('w' + L.piece) + '" width="34" height="34" alt=""></span><span><b>' + esc(L.name) + '</b><small>' + (Store.data.lessons[L.id] ? '<span class="good">Completed ✓</span>' : L.levels.length + ' levels') + '</small></span></button>').join('') + '</div>' +
       '<div class="section-title">Checkmate drills</div><div class="list">' + DRILLS.map(D => '<button class="item" data-drill="' + D.id + '"><div class="mini" style="width:54px;flex-shrink:0"></div><div class="grow"><b>' + esc(D.name) + '</b><div class="small muted">' + esc(D.text) + '</div></div>' + (Store.data.drills[D.id] ? '<span class="chip acc">' + Store.data.drills[D.id] + ' moves' + (Store.data.drills[D.id] <= D.par ? ' ★' : '') + '</span>' : '') + '</button>').join('') + '</div>' +
       '<div class="section-title">Practice tactics</div><div class="tiles"><button class="tile" data-pz="fork"><span class="ic" style="background:#4f8fe022;color:#6aa5f0">⑂</span><span><b>Forks</b><small>Hit two targets at once</small></span></button><button class="tile" data-pz="mateIn1"><span class="ic" style="background:#e2544b22;color:#ef6b5f">#</span><span><b>Mate in 1</b><small>Spot the checkmate</small></span></button></div>' +
       '<div class="section-title">The rules</div><div class="list">' + RULES.map((r, i) => '<button class="item" data-rule="' + i + '"><div class="grow"><b>' + esc(r[0]) + '</b></div><span class="faint">›</span></button>').join('') + '</div></div>';
     $$('[data-drill]', el).forEach(b => { const D = DRILLS.find(x => x.id === b.dataset.drill); const m = b.querySelector('.mini'); const bd = document.createElement('div'); bd.className = 'mini-board'; m.appendChild(bd); new Board(bd, { coords: false, animMs: 0 }).set({ fen: D.fen, animate: false }); });
     el.addEventListener('click', e => {
+      if (e.target.closest('[data-withcoach]')) return App.go('bots', { coach: true });
       const l = e.target.closest('[data-lesson]'); if (l) return App.go('lesson', { id: l.dataset.lesson });
       const d = e.target.closest('[data-drill]'); if (d) return App.go('drill', { id: d.dataset.drill });
       const t = e.target.closest('[data-pz]'); if (t) return App.go('puzzle', { mode: 'theme', theme: t.dataset.pz });

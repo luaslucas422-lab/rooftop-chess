@@ -56,6 +56,25 @@ async function move(p, from, to) { await tap(p, from); await wait(60); await tap
   assert(/accuracy/i.test(await a.locator('.gv-main .coach .bubble').innerText()));
   console.log('review ok');
 
+  // Coach Mira stops the game when the queen is left hanging, and the takeback puts it back
+  await a.evaluate(() => Play.startBot(BOTS[4], 'w', { startFen: '7k/8/8/3p4/8/8/4Q3/4K3 w - - 0 1', coach: true }));
+  await a.waitForSelector('.gv-main .coach-live .coach-msg');
+  await move(a, 'e2', 'e4');
+  await a.waitForSelector('.gv-main [data-coach="undo"]', { timeout: 20000 });
+  assert(/queen on e4/.test(await a.locator('.gv-main .coach-live').innerText()), 'the coach explains the blunder');
+  await wait(1500);
+  assert.strictEqual(await a.evaluate(() => Play.current.game.history.length), 1, 'the bot waits while the coach talks');
+  await a.click('.gv-main [data-coach="undo"]');
+  await a.waitForFunction(() => Play.current.game.history.length === 0 && Play.current.myTurn());
+  await move(a, 'e2', 'e4');
+  await a.waitForSelector('.gv-main [data-coach="play"]', { timeout: 20000 }); await a.click('.gv-main [data-coach="play"]');
+  await a.waitForFunction(() => Play.current.game.history.length === 2, null, { timeout: 15000 });
+  await a.click('.gv-main [data-act="menu"]'); await a.click('[data-m="resign"]'); await a.click('[data-yes]');
+  await a.waitForSelector('[data-r="review"]');
+  assert.strictEqual(await a.evaluate(() => Store.data.beaten.ravi), undefined);
+  await a.evaluate(() => UI.closeSheet());
+  console.log('coach ok');
+
   // a rated puzzle, solved with its own solution
   await a.evaluate(() => App.go('puzzle', { mode: 'rated' }));
   await a.waitForFunction(() => Puzzles.active && Puzzles.active.step === 1, null, { timeout: 10000 });

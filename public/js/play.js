@@ -61,6 +61,7 @@
       this.thinking = false; this.token = 0;
       this.drawOffer = o.drawOffer || null; this.rematchOffer = null; this.online = o.online || { w: true, b: true };
       this.premove = null; this.hintMove = null; this.assisted = false;
+      this.coach = null; this.coachGate = null; this.coached = false;   // Coach Mira (bot games)
       this.offs = [];
       const st = this.game.status(); if (st.over) this.over = st;
       if (o.over) this.over = o.over;
@@ -79,20 +80,23 @@
     /* ---------- screen ---------- */
     mount(el) {
       this.el = el;
-      const evalbar = false;
-      el.innerHTML = '<div class="gv' + (evalbar ? ' with-eval' : '') + '">' +
+      const evalbar = false, coach = this.mode === 'bot' ? '<div class="coach-live" aria-live="polite"></div>' : '';
+      el.innerHTML = '<div class="gv' + (evalbar ? ' with-eval' : '') + (this.coach ? ' with-coach' : '') + '">' +
         '<div class="topbar"><button class="iconbtn" data-act="exit" aria-label="Back">' + icon('back') + '</button><h2 class="gv-title"></h2><button class="iconbtn" data-act="menu" aria-label="Menu">' + icon('menu') + '</button></div>' +
         '<div class="gv-main"><div class="gv-wrap">' +
           '<div class="pbar" data-side="top"></div><div class="gv-boardrow" style="position:relative"><div class="board"></div></div><div class="pbar" data-side="bottom"></div>' +
-        '</div><div class="gv-status"></div><div class="opening"></div><div class="moves"></div><div class="actions"></div></div>' +
-        '<div class="gv-side"><div class="side-head"><h3 class="gv-title"></h3><button class="iconbtn" data-act="menu" aria-label="Menu">' + icon('menu') + '</button></div><div class="gv-status"></div><div class="opening"></div><div class="moves"></div>' +
+        '</div>' + coach + '<div class="gv-status"></div><div class="opening"></div><div class="moves"></div><div class="actions"></div></div>' +
+        '<div class="gv-side"><div class="side-head"><h3 class="gv-title"></h3><button class="iconbtn" data-act="menu" aria-label="Menu">' + icon('menu') + '</button></div>' + coach + '<div class="gv-status"></div><div class="opening"></div><div class="moves"></div>' +
         (this.mode === 'watch' || this.mode === 'battle' ? '' : '<input class="field moveinput" placeholder="Type a move, like Nf3 or e2e4" aria-label="Type a move" autocomplete="off" spellcheck="false">') + '<div class="actions"></div></div>' +
         '</div>';
       const s = Store.data.settings;
       this.board = new Board($('.board', el), { orientation: this.orientation, coords: s.coords, showDests: s.dests, autoQueen: s.autoQueen, animMs: s.anim, premoves: s.premoves && this.mode === 'online',
         onMove: (f, t, p) => this.userMove(f, t, p), onPremove: (f, t, p) => { this.premove = f ? { from: f, to: t, promo: p } : null; },
         premoveDests: sq => this.premoveDests(sq) });
-      el.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && !b.disabled) this.act(b.dataset.act, b); });
+      el.addEventListener('click', e => {
+        const b = e.target.closest('[data-act]'); if (b && !b.disabled) this.act(b.dataset.act, b);
+        const c = e.target.closest('[data-coach]'); if (c && this.coach) this.coach.press(c.dataset.coach);
+      });
       const typed = $('.moveinput', el);
       if (typed) typed.addEventListener('keydown', e => {
         if (e.key !== 'Enter') return;
@@ -105,6 +109,7 @@
       });
       this.timer = setInterval(() => this.tick(), 100);
       this.draw(false);
+      if (this.coach) this.coach.render();
     }
     unmount() { clearInterval(this.timer); this.el = null; this.board = null; }
 
@@ -144,7 +149,8 @@
         const bar = $('.pbar[data-side="' + side + '"]', this.el), p = this.players[c] || { name: c === 'w' ? 'White' : 'Black' };
         const rating = p.rating != null ? ' <span class="rt">(' + p.rating + (p.provisional ? '?' : '') + ')</span>' : '';
         const dot = this.mode === 'online' || this.mode === 'watch' ? '<span class="dot' + (this.online[c] === false ? ' off' : '') + '"></span>' : '';
-        const thinking = this.thinking && ((this.mode === 'bot' && c !== this.me) || (this.mode === 'battle' && c === this.game.turn)) ? '<span class="thinking"><i></i><i></i><i></i></span>' : '';
+        const waiting = this.coach && this.coach.release;   // the coach has stopped the game
+        const thinking = this.thinking && !waiting && ((this.mode === 'bot' && c !== this.me) || (this.mode === 'battle' && c === this.game.turn)) ? '<span class="thinking"><i></i><i></i><i></i></span>' : '';
         const diff = c === 'w' ? mat.diff : -mat.diff;
         bar.innerHTML = UI.avatarHtml(p, 36) + '<div class="who"><div class="nm"><span class="ellipsis">' + esc(p.name) + '</span>' + rating + dot + thinking + '</div><div class="caps">' + capsHtml(mat[c], diff) + '</div></div>' +
           (this.clock ? '<div class="clock" data-clock="' + c + '"></div>' : '');
@@ -266,6 +272,8 @@
       const st = this.game.status();
       if (st.over && this.mode !== 'online' && this.mode !== 'watch') { this.draw(); this.end(st); return; }
       this.draw();
+      // the coach judges your move while the bot thinks (the bot waits for her), and looks around when it's your turn
+      if (this.coach && !st.over) { if (mine) this.coachGate = this.coach.afterUserMove(rec); else this.coach.yourTurn(); }
       if (!st.over && ((this.mode === 'bot' && this.game.turn !== this.me) || this.mode === 'battle')) this.botTurn();
       this.save();
     }
@@ -298,6 +306,7 @@
       const wait = Math.max(0, want - (performance.now() - t0));
       await new Promise(r => setTimeout(r, wait));
       if (token !== this.token || this.over) return;
+      if (this.coachGate) { const gate = this.coachGate; this.coachGate = null; await gate; if (token !== this.token || this.over) return; }
       this.thinking = false;
       const rec = res && res.best && this.game.move(res.best);
       if (!rec) { this.drawActions(); return; }
@@ -347,6 +356,7 @@
       this.premove = null;
       if (this.board) this.board.clearPremove();
       engine('bot').stop(); engine('hint').stop();
+      if (this.coach) this.coach.gameOver(st);
       const won = this.me && st.winner === this.me;
       Sound.play(won ? 'win' : 'end');
       if (this.mode === 'bot' && st.reason !== 'aborted') this.botSay(!st.winner ? 'draw' : won ? 'lose' : 'win');
@@ -374,7 +384,7 @@
         return '<div class="rp' + (o.winner === c ? ' winner' : '') + '">' + UI.avatarHtml(p, 64) + '<div class="nm">' + esc(p.name) + '</div><div class="small muted">' +
           (rc && rc[c] ? rc[c].now + ' <span class="delta ' + (d >= 0 ? 'good' : 'bad') + '">' + (d >= 0 ? '+' : '') + d + '</span>' : p.rating != null ? p.rating : '') + '</div></div>'; };
       let extra = '';
-      if (this.mode === 'bot' && o.winner === this.me) extra = '<p class="center good"><b>' + (this.assisted ? 'Nice win! (Win without takebacks or hints to earn the badge.)' : 'You beat ' + esc(this.bot.name) + '! Badge earned.') + '</b></p>';
+      if (this.mode === 'bot' && o.winner === this.me) extra = '<p class="center good"><b>' + (this.assisted ? 'Nice win! (Win without ' + (this.coached ? 'the coach, ' : '') + 'takebacks or hints to earn the badge.)' : 'You beat ' + esc(this.bot.name) + '! Badge earned.') + '</b></p>';
       const s = sheet('<div class="result-head"><h2>' + esc(this.resultTitle()) + '</h2><div class="muted">' + esc(this.reasonText()) + '</div></div>' +
         '<div class="result-players">' + pl('w') + '<div class="vs">' + esc(o.result && o.result !== '*' ? o.result.replace('1/2-1/2', '½-½') : 'vs') + '</div>' + pl('b') + '</div>' + extra +
         '<div class="col gap">' + (this.game.history.length >= 2 ? '<button class="btn primary big" data-r="review">' + icon('review') + ' Game Review</button>' : '') +
@@ -404,10 +414,11 @@
         }
         case 'takeback': {
           if (!n) return;
-          this.token++; this.thinking = false; engine('bot').stop();
+          this.token++; this.thinking = false; this.coachGate = null; engine('bot').stop();
           if (this.mode === 'bot') { this.assisted = true; g.undo(); if (g.turn !== this.me && g.history.length) g.undo(); }
           else g.undo();
           this.over = null; this.ended = false; this.view = null; this.hintMove = null;
+          if (this.coach) this.coach.takenBack();
           this.draw(); this.save();
           if (this.mode === 'bot' && g.turn !== this.me) this.botTurn();
           return;
@@ -440,7 +451,7 @@
         }
         case 'newonline': return App.go('online', { tc: this.tcLabel().replace(' | ', '+'), auto: true });
         case 'again':
-          if (this.mode === 'bot') return Play.startBot(this.bot, this.me === 'w' ? 'b' : 'w');
+          if (this.mode === 'bot') return Play.startBot(this.bot, this.me === 'w' ? 'b' : 'w', { coach: !!this.coach });
           if (this.mode === 'local') return Play.startLocal({ tc: this.tc, flipEach: this.flipEach });
           if (this.mode === 'battle') return Play.startBattle(this.bots.w, this.bots.b);
           return App.go('home');
@@ -452,7 +463,7 @@
     menu() {
       const items = [];
       const it = (k, ic, label) => items.push('<button class="menu-item" data-m="' + k + '">' + icon(ic) + label + '</button>');
-      if (!this.over && this.mode === 'bot') { it('resign', 'flag', 'Resign'); it('draw', 'half', 'Offer a draw'); }
+      if (!this.over && this.mode === 'bot') { it('resign', 'flag', 'Resign'); it('draw', 'half', 'Offer a draw'); if (!this.drill) it('coach', 'hint', this.coach ? 'Turn the coach off' : 'Turn the coach on'); }
       if (!this.over && this.mode === 'local') { it('resign', 'flag', (this.game.turn === 'w' ? 'White' : 'Black') + ' resigns'); it('draw', 'half', 'Agree to a draw'); it('autoflip', 'flip', (this.flipEach ? 'Stop' : 'Start') + ' turning the board each move'); }
       if (this.mode !== 'local') it('flip', 'flip', 'Flip board');
       if (this.over && this.game.history.length) it('review', 'review', 'Game Review');
@@ -472,6 +483,7 @@
         if (k === 'share') return navigator.share({ title: 'Rooftop Chess game', text: this.game.pgn({ White: this.players.w.name, Black: this.players.b.name }) }).catch(() => {});
         if (k === 'settings') return App.settingsSheet(() => this.applySettings());
         if (k === 'autoflip') { this.flipEach = !this.flipEach; if (this.flipEach) { this.orientation = this.game.turn; this.board.setOrientation(this.orientation); this.draw(false); } return; }
+        if (k === 'coach') return this.setCoach(!this.coach);
         if (k === 'leave') { Net.send({ t: 'unwatch' }); Play.current = Play.player && Play.player !== this ? Play.player : null; return App.go('watch'); }
         if (k === 'home') return App.go('home');
         this.act(k);
@@ -485,8 +497,17 @@
     }
     save() {
       if (this.mode !== 'bot' || this.over) return;
-      Store.data.current = { mode: 'bot', bot: this.bot.id, me: this.me, startFen: this.game.startFen, moves: this.ucis, assisted: this.assisted, at: Date.now() };
+      Store.data.current = { mode: 'bot', bot: this.bot.id, me: this.me, startFen: this.game.startFen, moves: this.ucis, assisted: this.assisted, coach: !!this.coach, coached: this.coached, at: Date.now() };
       Store.save();
+    }
+    /* Coach Mira on or off. Her help counts like hints: no "beaten" badge for a game she was in. */
+    setCoach(on) {
+      if (!on === !this.coach || this.mode !== 'bot') return;
+      if (on) { this.coach = new Coach.Live(this); this.assisted = true; this.coached = true; }
+      else { this.coach.stop(); this.coach = null; this.coachGate = null; }
+      if (this.el) { const gv = $('.gv', this.el); gv.classList.toggle('with-coach', !!this.coach); gv.classList.remove('coach-ask'); for (const x of $$('.coach-live', this.el)) x.innerHTML = ''; this.drawBars(this.currentFen()); }
+      if (this.coach) this.coach.start();
+      this.save();
     }
     showChat(from, text) {
       if (!this.el) return;
@@ -507,13 +528,15 @@
     startBot(bot, color, opts) {
       opts = opts || {};
       const mine = color === 'r' || !color ? (Math.random() < 0.5 ? 'w' : 'b') : color;
-      engine('bot').stop();   // forget anything a previous game asked for
+      engine('bot').stop(); engine('coach').stop();   // forget anything a previous game asked for
       const you = Object.assign(me(), { rating: null });
       const ctl = new GameCtl({ mode: 'bot', me: mine, bot, startFen: opts.startFen, moves: opts.moves, players: mine === 'w' ? { w: you, b: bot } : { w: bot, b: you } });
-      ctl.assisted = !!opts.assisted;
+      ctl.assisted = !!opts.assisted; ctl.coached = !!opts.coached;
+      if (opts.coach && !ctl.over) { ctl.coach = new Coach.Live(ctl); ctl.assisted = ctl.coached = true; }
       this.current = ctl;
       App.go('game');
       if (!opts.moves || !opts.moves.length) { Sound.play('start'); setTimeout(() => ctl.botSay('hello'), 400); }
+      if (ctl.coach) ctl.coach.start();
       if (ctl.game.turn !== mine && !ctl.over) ctl.botTurn();
       ctl.save();
     },
@@ -525,7 +548,7 @@
     resumeBot() {
       const c = Store.data.current; if (!c) return;
       const bot = BOTS.find(b => b.id === c.bot); if (!bot) { Store.data.current = null; return; }
-      this.startBot(bot, c.me, { startFen: c.startFen, moves: c.moves, assisted: c.assisted });
+      this.startBot(bot, c.me, { startFen: c.startFen, moves: c.moves, assisted: c.assisted, coach: c.coach, coached: c.coached });
     },
     startLocal(o) {
       o = o || {};

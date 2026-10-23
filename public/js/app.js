@@ -194,7 +194,7 @@
 
   /* ---------- bots ---------- */
   function bots(el, params) {
-    let sel = BOTS.find(b => b.id === Store.data.lastBot) || BOTS[1], color = Store.data.lastColor || 'r';
+    let sel = BOTS.find(b => b.id === Store.data.lastBot) || BOTS[1], color = Store.data.lastColor || 'r', coach = params.coach != null ? !!params.coach : Store.data.coachOn !== false;
     const draw = () => {
       el.innerHTML = top('Play a bot') + '<div class="page" style="padding-top:4px">' +
         '<div class="card row gap" style="align-items:flex-start"><span class="av" style="width:72px;height:72px">' + sel.faceSvg + '</span><div class="grow"><h2 style="margin:0">' + esc(sel.name) + ' <span class="muted" style="font-size:16px">' + sel.rating + '</span></h2><p class="muted small" style="margin:4px 0 0">' + esc(sel.blurb) + '</p>' +
@@ -202,16 +202,19 @@
         (params.startFen ? '<p class="small muted" style="margin:10px 2px">Starting from the position you set up.</p>' : '') +
         '<div class="bot-grid" style="margin-top:12px">' + BOTS.map(b => '<button class="bot-card' + (b === sel ? ' on' : '') + '" data-bot="' + b.id + '">' + (Store.data.beaten[b.id] ? '<span class="won">✓</span>' : '') + '<span class="av" style="width:52px;height:52px">' + b.faceSvg + '</span><div class="nm">' + esc(b.name) + '</div><div class="rt">' + b.rating + '</div></button>').join('') + '</div>' +
         '<div class="tc-label">I play</div><div class="seg">' + [['w', 'White'], ['r', 'Random'], ['b', 'Black']].map(([k, n]) => '<button data-color="' + k + '" class="' + (color === k ? 'on' : '') + '">' + n + '</button>').join('') + '</div>' +
+        '<label class="card row gap" style="margin-top:14px"><span class="av" style="width:40px;height:40px">' + UI.face(Coach.FACE) + '</span><span class="grow"><b>Coach Mira</b><span class="small muted" style="display:block">Explains your moves, stops you on mistakes and warns you about threats</span></span>' +
+        '<span class="switch"><input type="checkbox" id="coach"' + (coach ? ' checked' : '') + '><span></span></span></label>' +
         '<button class="btn primary big" style="margin-top:16px" data-a="play">Play ' + esc(sel.name) + '</button></div>';
     };
+    el.addEventListener('change', e => { if (e.target.id === 'coach') coach = e.target.checked; });
     el.addEventListener('click', e => {
       const b = e.target.closest('[data-bot]'); if (b) { sel = BOTS.find(x => x.id === b.dataset.bot); return draw(); }
       const c = e.target.closest('[data-color]'); if (c) { color = c.dataset.color; return draw(); }
       if (e.target.closest('[data-a="play"]')) {
-        Store.data.lastBot = sel.id; Store.data.lastColor = color; Store.save();
+        Store.data.lastBot = sel.id; Store.data.lastColor = color; Store.data.coachOn = coach; Store.save();
         let mine = color;
         if (params.startFen) mine = color === 'r' ? new Chess.Game(params.startFen).turn : color;
-        Play.startBot(sel, mine, { startFen: params.startFen });
+        Play.startBot(sel, mine, { startFen: params.startFen, coach });
       }
     });
     back(el); draw();

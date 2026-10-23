@@ -37,6 +37,7 @@ to a Postgres database and ratings are stored there too. Note that Render's free
 - **Play online** – bullet, blitz and rapid (1|0 up to 30|0): matchmaking, clocks kept on the server (with a little time given back for slow connections), Glicko ratings, draw offers, rematches, preset quick chat, premoves, leaderboard.
 - **Play a friend** – a 6-letter code or a share link; casual or rated.
 - **Play a bot** – 12 characters from 250 to 2800, with takebacks, hints, chatty personalities and "beaten" badges. Their ratings come from playing them against each other (each beats the one below 3 or 4 games in 5, see below); Titan, the full-strength engine, is an estimate.
+- **Coach Mira** – switch her on when you pick a bot (or from Learn). She checks every move you make: a mistake stops the game and she says what went wrong ("Your queen on e4 isn’t protected there – dxe4 takes it"), and you can take it back, see the best move, or play on. On your turn she warns you about threats, tells you when the bot slips, and gives opening tips. Games with her help don’t earn the "beaten" badge.
 - **Pass & play** – two people on one device, with an optional clock.
 - **Puzzles** – 831 puzzles with your own puzzle rating (easier / normal / harder), Puzzle Rush (3 minutes, 3 strikes), a daily puzzle and themes.
 - **Game Review** – every move rated (best, brilliant, great, mistake, blunder…) with accuracy, an eval graph and an explanation; jump between key moments, retry your mistakes, and play through the engine's best line.
@@ -70,11 +71,12 @@ These are ratings against each other; how they compare to people's ratings is a 
 - `public/` – the app (plain HTML/CSS/JS, no build step). Rules: `public/js/chess.js`. Engine: `public/js/engine.js`, run in a background thread by `engine-worker.js`.
 - `server.js` – serves the app and connects online players. `chess-server.js` – matchmaking, clocks, ratings; every move is checked with the same `chess.js` the app uses.
 - `filter.js` – keeps player names friendly (no links, contact details or rude words).
+- `public/js/coach.js` – Coach Mira: how she judges and explains moves (tested in `test/coach.test.js`), and the coach in a game.
 - `public/js/botplay.js` – how each bot picks its moves. `tools/calibrate-bots.js` plays bots against each other to measure them:
   `node tools/calibrate-bots.js play hector yuki 40 out.json`, then `node tools/calibrate-bots.js report out.json`.
 - `tools/make-puzzles.js` – makes the puzzles. Bots play each other, and when one blunders the engine checks that only one move wins.
   Run `node tools/make-puzzles.js <seed> <games> out.json` (several at once is faster), then `node tools/make-puzzles.js merge public/js/puzzles.js out*.json`.
-- `test/` – `npm test` runs the rules tests (perft move counts, SAN/PGN, draws, every opening line and puzzle), the engine tests, and an online test with two players
+- `test/` – `npm test` runs the rules tests (perft move counts, SAN/PGN, draws, every opening line and puzzle), the engine tests, the coach tests, and an online test with two players
   (including a server restart). `npm run test:browser` plays through the app in a headless browser (needs Playwright). GitHub runs both on every push.
 
 Players are known by a secret token saved on their device; only its hash is stored on the server. Updates reach installed apps by themselves.

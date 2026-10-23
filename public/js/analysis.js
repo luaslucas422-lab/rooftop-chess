@@ -321,7 +321,7 @@
     const keyPlies = () => cl.map((c, i) => KEY.includes(c.cls) ? i + 1 : 0).filter(Boolean);
     const BAD = ['inaccuracy', 'mistake', 'miss', 'blunder'];
     let mode = 'review', retry = null, line = null;   // mode: review | retry | line
-    const coachFace = () => '<span class="av" style="width:38px;height:38px">' + UI.face({ bg: '#2f6fd6', skin: 1, hair: 0, style: 1, eyes: 2, mouth: 0, acc: 1 }) + '</span>';
+    const coachFace = () => '<span class="av" style="width:38px;height:38px">' + UI.face(Coach.FACE) + '</span>';
     const setCoach = html => { for (const x of $$('.coach', el)) x.innerHTML = coachFace() + '<div class="bubble">' + html + '</div>'; };
     const setActs = html => { for (const x of $$('.review-acts', el)) x.innerHTML = html; };
     const setNav = keys => { for (const n of $$('.navbtns', el)) n.innerHTML = keys.map(k => '<button data-a="' + k + '" aria-label="' + k + '">' + icon(k) + '</button>').join(''); };

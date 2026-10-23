@@ -295,3 +295,32 @@ body.bigclock .clock { font-size: 26px; min-width: 112px; }
 .editor-controls { padding: 4px 12px 12px; width: 100%; }
 .moveinput { display: none; }
 @media (min-width: 900px) { .gv-side .moveinput { display: block; margin: 8px 10px 0; width: calc(100% - 20px); padding: 9px 12px; font-size: 14px; } }
+
+/* ---------- Coach Mira in bot games ---------- */
+.coach-live { position: relative; display: none; gap: 8px; align-items: flex-start; padding: 6px 10px 0; width: 100%; }
+.gv.with-coach .coach-live { display: flex; }
+/* on phones she takes the empty status row and some of the board; while she offers buttons the move strip makes room */
+.gv.with-coach .gv-wrap { --bw: min(100vw, calc(100dvh - 336px - var(--safeT) - var(--safeB))); }
+.gv.with-coach .gv-main > .gv-status:empty { min-height: 0; padding: 0; }
+.gv.coach-ask .gv-main > .moves { display: none; }
+.coach-live > .av { width: 34px; height: 34px; }
+.coach-live.busy::after { content: ''; position: absolute; left: 34px; top: 30px; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--line); border-top-color: var(--accent); background: var(--bg); animation: spin .8s linear infinite; }
+.coach-live .bubble { flex: 1; min-width: 0; background: var(--card); border-radius: 4px 14px 14px 14px; border-left: 3px solid transparent; padding: 7px 10px; font-size: 13.5px; line-height: 1.38; }
+.coach-live .coach-name { display: none; font-size: 12px; font-weight: 800; color: var(--muted); margin-bottom: 2px; }
+.coach-live .coach-msg { max-height: 4.2em; overflow-y: auto; }
+.coach-live .coach-msg b { font-weight: 800; }
+.coach-live .cls-dot { width: 18px; height: 18px; font-size: 10px; margin: -2px 5px 0 0; }
+.coach-live .coach-btns { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 7px; }
+.coach-live .coach-btns:empty { display: none; }
+.coach-live .coach-btns .btn { min-height: 32px; padding: 5px 9px; font-size: 13px; }
+@media (min-width: 900px) {
+  .gv-main > .coach-live { display: none !important; }
+  .gv.with-coach .gv-wrap { --bw: min(calc(100dvh - 130px), calc(100vw - 460px)); }
+  .gv-side .coach-live { padding: 12px 14px; border-bottom: 1px solid var(--line); }
+  .gv-side .coach-live > .av { width: 42px; height: 42px; }
+  .gv-side .coach-live.busy::after { left: 46px; top: 44px; }
+  .gv-side .coach-live .bubble { background: var(--card2); }
+  .gv-side .coach-live .coach-btns .btn:not(.primary) { background: var(--card); }
+  .gv-side .coach-live .coach-name { display: block; }
+  .gv-side .coach-live .coach-msg { max-height: none; }
+}
