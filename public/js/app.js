@@ -303,7 +303,7 @@
 
   /* ---------- settings ---------- */
   const BOARDS = [['grass', 'Grass', '#eeeed2', '#769656'], ['walnut', 'Walnut', '#f0d9b5', '#b58863'], ['ocean', 'Ocean', '#dee3e6', '#8ca2ad'], ['dusk', 'Dusk', '#e8e2f3', '#8f7bb5'], ['sunset', 'Sunset', '#f7e4c9', '#d18b55'], ['slate', 'Slate', '#c9ced6', '#6b7686']];
-  const TOGGLES = [['sound', 'Sounds'], ['dests', 'Show legal moves'], ['coords', 'Board coordinates'], ['lastMove', 'Highlight the last move'], ['autoQueen', 'Always promote to a queen'], ['premoves', 'Premoves in online games'], ['confirmResign', 'Ask before resigning'], ['bigClock', 'Big clock']];
+  const TOGGLES = [['sound', 'Sounds'], ['vibrate', 'Vibrate on moves'], ['dests', 'Show legal moves'], ['coords', 'Board coordinates'], ['lastMove', 'Highlight the last move'], ['autoQueen', 'Always promote to a queen'], ['premoves', 'Premoves in online games'], ['botChat', 'Bots talk during games'], ['confirmResign', 'Ask before resigning'], ['bigClock', 'Big clock']];
   function settingsHtml(full) {
     const s = S();
     return '<div class="section-title" style="margin-top:4px">Board</div><div class="row wrap gap">' + BOARDS.map(([k, n, l, d]) => '<button data-boardtheme="' + k + '" style="border:2px solid ' + (s.board === k ? 'var(--accent)' : 'transparent') + ';border-radius:12px;padding:4px;background:var(--card2)"><span style="display:grid;grid-template-columns:1fr 1fr;width:46px;height:46px;border-radius:8px;overflow:hidden"><i style="background:' + l + '"></i><i style="background:' + d + '"></i><i style="background:' + d + '"></i><i style="background:' + l + '"></i></span><div class="tiny" style="margin-top:3px">' + n + '</div></button>').join('') + '</div>' +
@@ -351,7 +351,7 @@
     const s = S(), d = document.documentElement;
     d.dataset.theme = s.theme; d.dataset.board = s.board;
     document.body.classList.toggle('nolast', !s.lastMove); document.body.classList.toggle('bigclock', !!s.bigClock);
-    Sound.enabled = s.sound;
+    Sound.enabled = s.sound; Sound.vibrate = s.vibrate !== false;
     const m = $('meta[name="theme-color"]'); if (m) m.content = s.theme === 'light' ? '#f2f0ea' : '#15181d';
   }
 

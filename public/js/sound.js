@@ -42,6 +42,9 @@
     set enabled(v) { on = !!v; }, get enabled() { return on; },
     unlock() { ac(); },
     play(name) { if (!on) return; const c = ac(); if (!c || !SOUNDS[name]) return; try { SOUNDS[name](c, c.currentTime + 0.005); } catch (e) {} },
+    vibrate: true,
+    /* a short buzz for a move in a live game (phones that support it) */
+    buzz(rec) { if (this.vibrate && navigator.vibrate) try { navigator.vibrate(rec && rec.capture ? 28 : 14); } catch (e) {} },
     /* the right sound for a move record from Chess.Game */
     forMove(rec) { if (!rec) return; this.play(/#|\+/.test(rec.san) ? 'check' : rec.promo ? 'promote' : rec.castle ? 'castle' : rec.capture ? 'capture' : 'move'); },
   };

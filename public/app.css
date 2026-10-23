@@ -293,3 +293,5 @@ body.bigclock .clock { font-size: 26px; min-width: 112px; }
 .palette button.on { border-color: var(--accent); background-color: rgba(255, 159, 67, .15); }
 .palette .erase { font-size: 18px; color: var(--bad); font-weight: 900; }
 .editor-controls { padding: 4px 12px 12px; width: 100%; }
+.moveinput { display: none; }
+@media (min-width: 900px) { .gv-side .moveinput { display: block; margin: 8px 10px 0; width: calc(100% - 20px); padding: 9px 12px; font-size: 14px; } }

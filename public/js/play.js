@@ -85,13 +85,24 @@
         '<div class="gv-main"><div class="gv-wrap">' +
           '<div class="pbar" data-side="top"></div><div class="gv-boardrow" style="position:relative"><div class="board"></div></div><div class="pbar" data-side="bottom"></div>' +
         '</div><div class="gv-status"></div><div class="opening"></div><div class="moves"></div><div class="actions"></div></div>' +
-        '<div class="gv-side"><div class="side-head"><h3 class="gv-title"></h3><button class="iconbtn" data-act="menu" aria-label="Menu">' + icon('menu') + '</button></div><div class="gv-status"></div><div class="opening"></div><div class="moves"></div><div class="actions"></div></div>' +
+        '<div class="gv-side"><div class="side-head"><h3 class="gv-title"></h3><button class="iconbtn" data-act="menu" aria-label="Menu">' + icon('menu') + '</button></div><div class="gv-status"></div><div class="opening"></div><div class="moves"></div>' +
+        (this.mode === 'watch' || this.mode === 'battle' ? '' : '<input class="field moveinput" placeholder="Type a move, like Nf3 or e2e4" aria-label="Type a move" autocomplete="off" spellcheck="false">') + '<div class="actions"></div></div>' +
         '</div>';
       const s = Store.data.settings;
       this.board = new Board($('.board', el), { orientation: this.orientation, coords: s.coords, showDests: s.dests, autoQueen: s.autoQueen, animMs: s.anim, premoves: s.premoves && this.mode === 'online',
         onMove: (f, t, p) => this.userMove(f, t, p), onPremove: (f, t, p) => { this.premove = f ? { from: f, to: t, promo: p } : null; },
         premoveDests: sq => this.premoveDests(sq) });
       el.addEventListener('click', e => { const b = e.target.closest('[data-act]'); if (b && !b.disabled) this.act(b.dataset.act, b); });
+      const typed = $('.moveinput', el);
+      if (typed) typed.addEventListener('keydown', e => {
+        if (e.key !== 'Enter') return;
+        const v = typed.value.trim(); if (!v) return;
+        if (!this.myTurn() || this.thinking || (this.view != null && this.view < this.game.history.length)) { toast('It’s not your move'); return; }
+        const m = this.game.find(v);
+        if (m == null) { Sound.play('illegal'); toast('“' + v + '” isn’t a legal move here'); return; }
+        typed.value = '';
+        this.userMove(Chess.sqName(Chess.mFrom(m)), Chess.sqName(Chess.mTo(m)), Chess.mFlags(m) & Chess.F_PROMO ? Chess.LETTERS[Chess.mPromo(m)] : null);
+      });
       this.timer = setInterval(() => this.tick(), 100);
       this.draw(false);
     }
@@ -243,6 +254,8 @@
     afterMove(rec, mine) {
       this.view = null; this.hintMove = null;
       Sound.forMove(rec);
+      if (this.mode === 'bot') this.botReacts(rec);
+      if (this.mode !== 'battle') Sound.buzz(rec);
       if (this.clock && this.mode === 'local') {
         const n = this.game.history.length, i = rec.color === 'w' ? 0 : 1, t = performance.now();
         if (this.running) this.clock[i] = Math.max(0, this.clock[i] - (t - this.clockAt)) + this.tc.inc;
@@ -257,6 +270,22 @@
       this.save();
     }
 
+    /* the bot says something now and then: when it takes or loses a piece, or gives check */
+    botSay(kind) {
+      const lines = this.bot && this.bot.chat; if (!lines || !lines[kind] || !Store.data.settings.botChat) return;
+      const n = this.game.history.length;
+      if (kind !== 'hello' && !['win', 'lose', 'draw'].includes(kind) && n - (this.saidAt == null ? -9 : this.saidAt) < 6) return;
+      this.saidAt = n;
+      setTimeout(() => this.showChat(otherC(this.me), lines[kind]), 250);
+    }
+    botReacts(rec) {
+      const byBot = rec.color !== this.me;
+      let taken = 0;
+      if (rec.capture) { const p = new Chess.Position(rec.fenBefore).pieceAt(rec.ep ? rec.to[0] + rec.from[1] : rec.to); taken = p ? { p: 1, n: 3, b: 3, r: 5, q: 9 }[p.type] || 0 : 0; }
+      if (byBot && /\+$/.test(rec.san) && Math.random() < 0.35) this.botSay('check');
+      else if (byBot && taken >= 3 && Math.random() < 0.6) this.botSay('gotcha');
+      else if (!byBot && taken >= 3 && Math.random() < 0.6) this.botSay('ouch');
+    }
     async botTurn() {
       const token = ++this.token;
       this.thinking = true; this.drawActions(); this.drawBars(this.game.fen());
@@ -285,7 +314,8 @@
       const rec = this.game.move(m.uci);
       if (!rec) { Net.send({ t: 'sync' }); return; }
       this.view = null;
-      Sound.forMove(rec);
+      Sound.forMove(rec); Sound.buzz(rec);
+      if (document.hidden && this.mode === 'online') document.title = '● Your move – Rooftop Chess';
       this.draw();
       // play the queued premove if it's still legal
       if (this.premove && this.mode === 'online') {
@@ -318,6 +348,7 @@
       engine('bot').stop(); engine('hint').stop();
       const won = this.me && st.winner === this.me;
       Sound.play(won ? 'win' : 'end');
+      if (this.mode === 'bot' && st.reason !== 'aborted') this.botSay(!st.winner ? 'draw' : won ? 'lose' : 'win');
       this.record();
       if (this.mode === 'bot') Store.data.current = null;
       if (this.mode === 'bot' && won && !this.assisted) Store.data.beaten[this.bot.id] = true;
@@ -481,7 +512,7 @@
       ctl.assisted = !!opts.assisted;
       this.current = ctl;
       App.go('game');
-      if (!opts.moves || !opts.moves.length) Sound.play('start');
+      if (!opts.moves || !opts.moves.length) { Sound.play('start'); setTimeout(() => ctl.botSay('hello'), 400); }
       if (ctl.game.turn !== mine && !ctl.over) ctl.botTurn();
       ctl.save();
     },
@@ -516,6 +547,8 @@
       return () => ctl.unmount();
     },
   };
+
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) document.title = 'Rooftop Chess'; });
 
   /* online events */
   Net.on('game', s => {
