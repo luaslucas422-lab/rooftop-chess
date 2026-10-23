@@ -1,0 +1,9 @@
+/* Name filter (the same one Rooftop Rumble uses for party chat): no links, emails, phone numbers or rude words */
+const CHAT_BAD = ['sex','fuck','fuk','fck','shit','bitch','btch','cunt','dick','cock','pussy','asshole','dumbass','bastard','slut','whore','nigg','niga','fag','retard','rape','rapist','penis','vagina','porn','sexy','nude','boob','tits','nazi','hitler','twat','wank','piss','kys','killyourself','suicide','jizz','cum','dildo','anal','pedo','molest','kkk'];
+const CHAT_OK = ['essex','sussex','wessex','middlesex','sextant','sexton','sextet','scum','cumber','cucumber','document','circum','peacock','hancock','hitchcock','dickens','analys','canal','banal','grape','drape','scrape','therapist','skyscraper','cockpit','shitake','shiitake','cumul','accum'];
+function chatBadWord(w) { let t = String(w).toLowerCase(); for (const ok of CHAT_OK) t = t.split(ok).join('_'); t = t.replace(/[0@4]/g, m => m === '0' ? 'o' : 'a').replace(/[1!|]/g, 'i').replace(/3/g, 'e').replace(/[5$]/g, 's').replace(/7/g, 't').replace(/8/g, 'b').replace(/[^a-z_]/g, '').replace(/(.)\1{2,}/g, '$1$1'); const tc = t.replace(/(.)\1+/g, '$1'); return CHAT_BAD.some(b => t.includes(b) || tc.includes(b)); }
+function chatClean(s) { s = String(s || '').replace(/[\u0000-\u001f<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
+  s = s.replace(/(https?:\/\/|www\.)\S*/gi, '***').replace(/\S+\.(com|net|org|gg|io|co|uk|ie|me|tv|app|xyz|ly|be|link)\b\S*/gi, '***').replace(/\S+@\S+/g, '***').replace(/\d[\d ().+-]{5,}\d/g, '***');
+  const w = s.split(' '); for (let i = 0; i < w.length;) { if (w[i].length === 1) { let j = i, acc = ''; while (j < w.length && w[j].length === 1) { acc += w[j]; j++; } if (acc.length >= 3 && chatBadWord(acc)) for (let k = i; k < j; k++) w[k] = '*'; i = j; } else i++; }
+  return w.map(x => x !== '*' && x !== '***' && chatBadWord(x) ? '*'.repeat(Math.min(6, x.length)) : x).join(' '); }
+module.exports = { chatClean, chatBadWord };
