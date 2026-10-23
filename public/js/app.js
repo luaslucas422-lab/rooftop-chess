@@ -32,7 +32,11 @@
     document.body.classList.toggle('full', FULL.has(st.route));
     for (const b of $$('#tabs button')) b.classList.toggle('on', b.dataset.tab === TAB_OF[st.route]);
     const fn = SCREENS[st.route] || SCREENS.home;
-    try { cleanup = fn(fresh, st.params || {}) || null; } catch (e) { console.error(e); fresh.innerHTML = '<div class="page"><h2>Something went wrong</h2><p class="muted">' + esc(e.message) + '</p><button class="btn" onclick="location.hash=\'\';location.reload()">Reload</button></div>'; }
+    try { cleanup = fn(fresh, st.params || {}) || null; } catch (e) {
+      console.error(e);
+      fresh.innerHTML = '<div class="page"><h2>Something went wrong</h2><p class="muted">' + esc(e.message) + '</p><button class="btn" data-reload>Reload</button></div>';
+      $('[data-reload]', fresh).onclick = () => { location.hash = ''; location.reload(); };
+    }
     fresh.scrollTop = 0;
   }
   addEventListener('popstate', e => {
