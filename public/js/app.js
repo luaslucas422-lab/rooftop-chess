@@ -10,15 +10,17 @@
   const S = () => Store.data.settings;
   const FULL = new Set(['game', 'puzzle', 'rush', 'analysis', 'review', 'lesson', 'drill', 'editor']);
   const TAB_OF = { home: 'home', online: 'home', friend: 'home', bots: 'home', local: 'home', puzzles: 'puzzles', learn: 'learn', watch: 'watch', profile: 'profile', settings: 'profile', leaders: 'profile', games: 'profile' };
-  let cleanup = null, current = { route: 'home', params: {} }, installEvt = null;
+  let cleanup = null, current = { route: 'home', params: {} }, installEvt = null, depth = 0;   // depth: how many screens back we can go inside the app
 
   /* ---------- navigation ---------- */
   const App = {
     go(route, params, replace) {
       const st = { route, params: params || {} };
-      try { if (replace) history.replaceState(st, '', '#' + route); else history.pushState(st, '', '#' + route); } catch (e) {}
+      try { if (replace) history.replaceState(st, '', '#' + route); else { history.pushState(st, '', '#' + route); depth++; } } catch (e) {}
       render(st);
     },
+    /* back to the previous screen – but never out of the app (e.g. when it was opened from a link) */
+    back(fallback) { if (depth > 0) history.back(); else App.go(fallback || 'home', {}, true); },
     get route() { return current.route; },
     settingsSheet,
   };
@@ -35,11 +37,12 @@
   }
   addEventListener('popstate', e => {
     if (UI.closeSheet()) { try { history.pushState(current, '', '#' + current.route); } catch (x) {} return; }
+    depth = Math.max(0, depth - 1);
     render(e.state || { route: 'home', params: {} });
   });
 
   const top = (title, right) => '<div class="topbar"><button class="iconbtn" data-back aria-label="Back">' + icon('back') + '</button><h2>' + esc(title) + '</h2>' + (right || '') + '</div>';
-  const back = el => el.addEventListener('click', e => { if (e.target.closest('[data-back]')) history.length > 1 ? history.back() : App.go('home'); });
+  const back = el => el.addEventListener('click', e => { if (e.target.closest('[data-back]')) App.back(); });
   const miniBoard = (fen, flip) => { const d = document.createElement('div'); d.className = 'mini-board'; const b = new Board(d, { coords: false, animMs: 0, orientation: flip ? 'b' : 'w' }); b.set({ fen, animate: false }); return d; };
   const rr = r => r && r.games ? Math.round(r.r) + (r.provisional ? '?' : '') : '–';
 

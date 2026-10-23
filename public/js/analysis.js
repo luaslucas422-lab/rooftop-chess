@@ -91,7 +91,7 @@
       if (bk) { const t = new Chess.Game(fenAt(ply)), mv = t.find(bk.dataset.book); if (mv != null) move(Chess.sqName(Chess.mFrom(mv)), Chess.sqName(Chess.mTo(mv)), Chess.mFlags(mv) & Chess.F_PROMO ? Chess.LETTERS[Chess.mPromo(mv)] : null); return; }
       const b = e.target.closest('[data-a]'); if (!b) return;
       const a = b.dataset.a;
-      if (a === 'back') return history.length > 1 ? history.back() : App.go('home');
+      if (a === 'back') return App.back();
       if (a === 'first') ply = 0; if (a === 'last') ply = g.history.length;
       if (a === 'prev') ply = Math.max(0, ply - 1); if (a === 'next') ply = Math.min(g.history.length, ply + 1);
       if (a === 'flip') { orientation = orientation === 'w' ? 'b' : 'w'; board.setOrientation(orientation); if (lastInfo) setEvalBar($('.evalbar', el), lastInfo.lines[0], orientation); return; }
@@ -177,7 +177,7 @@
       const tn = e.target.closest('[data-turn]'); if (tn) { turn = tn.dataset.turn; return draw(); }
       const b = e.target.closest('[data-a]'); if (!b || b.disabled) return;
       const a = b.dataset.a;
-      if (a === 'back') return history.length > 1 ? history.back() : App.go('analysis');
+      if (a === 'back') return App.back('analysis');
       if (a === 'start') { map = Board.parseFen(Chess.START_FEN); turn = 'w'; }
       if (a === 'clear') { map = new Map([['e1', 'wK'], ['e8', 'bK']]); }
       if (a === 'flip') orientation = orientation === 'w' ? 'b' : 'w';
@@ -465,7 +465,7 @@
       if (gr && evals) { const r = gr.getBoundingClientRect(); mode = 'review'; ply = Math.round((e.clientX - r.left) / r.width * (evals.length - 1)); ply = Math.max(0, Math.min(g.history.length, ply)); return draw(); }
       const b = e.target.closest('[data-a]'); if (!b) return;
       const a = b.dataset.a;
-      if (a === 'back') return history.length > 1 ? history.back() : App.go('home');
+      if (a === 'back') return App.back();
       if (!cl) return;
       if (a === 'analysis') return App.go('analysis', { pgn: params.pgn, ply, flip: orientation === 'b' });
       if (a === 'flip') { orientation = orientation === 'w' ? 'b' : 'w'; board.setOrientation(orientation); return draw(); }

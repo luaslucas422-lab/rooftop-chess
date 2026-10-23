@@ -200,13 +200,15 @@ function createChessServer(opts) {
     const color = g.ids.w === p.id ? 'w' : g.ids.b === p.id ? 'b' : null;
     if (!color || g.chess.turn !== color) return send(p.ws, { t: 'error', msg: 'Not your turn' });
     if (typeof m.ply === 'number' && m.ply !== g.chess.history.length) return send(p.ws, gameState(g, p.id));   // out of step: resync
+    const uci = String(m.uci || '').slice(0, 5);
+    if (!/^[a-h][1-8][a-h][1-8][qrbn]?$/.test(uci) || g.chess.find(uci) == null) return send(p.ws, gameState(g, p.id));   // not a legal move: resync, clock untouched
     const t = now(), n = g.chess.history.length;
     const ci = color === 'w' ? 0 : 1;
     if (n >= 2) {
       g.clock[ci] -= Math.max(0, t - g.turnStart - Math.min(p.lag || 0, LAG_CREDIT_MAX));
       if (g.clock[ci] <= 0) { g.clock[ci] = 0; const winner = g.chess.timeoutResult(color); return finish(g, winner, winner ? 'timeout' : 'timeout vs insufficient material'); }
     }
-    const rec = g.chess.move(String(m.uci || '').slice(0, 5));
+    const rec = g.chess.move(uci);
     if (!rec) return send(p.ws, gameState(g, p.id));
     if (n >= 2) g.clock[ci] += g.tc.inc;
     g.turnStart = t;
@@ -275,14 +277,18 @@ function createChessServer(opts) {
       const id = sha('rooftop-chess:' + token).slice(0, 16);
       let p = people.get(id);
       if (p && p.ws && p.ws !== ws) { send(p.ws, { t: 'replaced' }); try { p.ws.close(); } catch (e) {} }
-      if (!p) { p = { id, ws, profile: await loadProfile(id), game: null, seek: null, challenge: null, watching: null, lag: 0 }; people.set(id, p); }
+      if (!p) {
+        const profile = await loadProfile(id);
+        p = people.get(id);   // another connection may have arrived while loading
+        if (!p) { p = { id, ws, profile, game: null, seek: null, challenge: null, watching: null, lag: 0 }; people.set(id, p); }
+      }
       p.ws = ws; ws.pid = id; clearTimeout(p.forget); p.probe = null;
       if (m.card && restoreFromCard(p.profile, m.card)) console.log('chess: ratings restored from a card for', id);
       const name = cleanName(String(m.name || '').trim()).trim();
       if (name) p.profile.name = name.slice(0, 20);
       if (Number.isFinite(m.face)) p.profile.face = Math.abs(m.face | 0);
       p.profile.seen = now();
-      store.put(p.profile).catch(() => {});
+      if (p.profile.updated) store.put(p.profile).catch(() => {});   // only players with rated games are kept (no storage for drive-by visitors)
       send(ws, { t: 'welcome', id, name: p.profile.name, ratings: ratingsOut(p.profile), card: makeCard(p.profile), chat: CHAT, tcs: TIME_CONTROLS, stats: stats() });
       const g = p.game && games.get(p.game);
       if (g) { const c = g.ids.w === id ? 'w' : 'b'; if (g.gone[c]) { g.gone[c] = 0; arm(g); } send(ws, gameState(g, id)); broadcast(g, { t: 'presence', id: g.id, color: c, online: true }); }

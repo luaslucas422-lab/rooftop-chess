@@ -43,8 +43,10 @@ let S = null;
   const moves = ['e2e4', 'e7e5', 'g1f3', 'b8c6', 'f1c4'];
   for (let i = 0; i < moves.length; i++) { (i % 2 ? B : W).send({ t: 'move', id, uci: moves[i], ply: i }); const ma = await a.next('move'); await b.next('move'); assert.strictEqual(ma.uci, moves[i]); assert.strictEqual(ma.ply, i + 1); }
   // clocks run after both first moves and increments apply
-  await wait(300); B.send({ t: 'move', id, uci: 'g8f6', ply: 5 }); const mv = await a.next('move'); await b.next('move');
-  assert(mv.clock[1] < 184000 && mv.clock[1] > 183000, 'black clock: 3:00 + two 2s increments - thinking time, got ' + mv.clock[1]);
+  // an illegal move on the way must not cost extra time: ~400ms thinking in total
+  await wait(200); B.send({ t: 'move', id, uci: 'g8g5', ply: 5 }); await B.next('game');
+  await wait(200); B.send({ t: 'move', id, uci: 'g8f6', ply: 5 }); const mv = await a.next('move'); await b.next('move');
+  assert(mv.clock[1] < 184000 && mv.clock[1] > 183500, 'black clock: 3:00 + two 2s increments - ~400ms thinking, got ' + mv.clock[1]);
   // draw offer, then resign
   W.send({ t: 'draw', id, op: 'offer' }); const off = await B.next('offer'); assert.strictEqual(off.kind, 'draw'); await W.next('offer');
   B.send({ t: 'resign', id }); const ea = await a.next('end'); await b.next('end');
