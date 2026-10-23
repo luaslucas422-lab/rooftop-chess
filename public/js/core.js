@@ -17,14 +17,19 @@
   data.settings = Object.assign({}, DEFAULT_SETTINGS, data.settings);
   const fill = blank(); for (const k in fill) if (data[k] == null) data[k] = fill[k];
   let saveT = null;
+  const write = () => { saveT = null; try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) {} };
   const Store = {
     get data() { return data; },
-    save(now) { clearTimeout(saveT); const w = () => { try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) {} }; if (now) w(); else saveT = setTimeout(w, 150); },
+    save(now) { clearTimeout(saveT); if (now) write(); else saveT = setTimeout(write, 150); },
     reset() { data = blank(); this.save(true); },
     addGame(rec) { data.games.unshift(rec); if (data.games.length > 150) data.games.length = 150; this.save(); },
     /* rating history for the graph on the Me tab. kind: 'puzzle' | 'bullet' | 'blitz' | 'rapid' */
     logRating(kind, r) { const log = data.ratingLog || (data.ratingLog = []); log.push({ t: Date.now(), k: kind, r: Math.round(r) }); if (log.length > 600) log.splice(0, log.length - 600); this.save(); },
   };
+
+  // phones may close the app any moment after it's hidden: write anything still waiting
+  const flush = () => { if (saveT) { clearTimeout(saveT); write(); } };
+  if (root.addEventListener) { root.addEventListener('pagehide', flush); root.addEventListener('visibilitychange', () => { if (root.document && root.document.hidden) flush(); }); }
 
   /* ---------- tiny UI helpers ---------- */
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -144,16 +149,17 @@
   /* ---------- the bots ---------- */
   const BOTS = [
     { id: 'pip', name: 'Pip', rating: 250, blurb: 'Just learned how the horsey moves. Thinks every piece is a snack.', face: { bg: 5, skin: 0, hair: 3, style: 3, eyes: 2, mouth: 3, acc: 0 }, level: BotPlay.LEVELS.pip },
-    { id: 'juniper', name: 'Juniper', rating: 400, blurb: 'Plays fast, loves attacking, forgets to defend.', face: { bg: 1, skin: 1, hair: 2, style: 2, eyes: 0, mouth: 0, acc: 5 }, level: BotPlay.LEVELS.juniper },
-    { id: 'otto', name: 'Otto', rating: 600, blurb: 'A retired postman who plays in the park every Sunday.', face: { bg: 2, skin: 0, hair: 6, style: 1, eyes: 3, mouth: 1, acc: 1 }, level: BotPlay.LEVELS.otto },
-    { id: 'mabel', name: 'Mabel', rating: 800, blurb: 'Knows the openings by name. The middle of the game, less so.', face: { bg: 3, skin: 2, hair: 0, style: 2, eyes: 1, mouth: 0, acc: 0 }, level: BotPlay.LEVELS.mabel },
-    { id: 'ravi', name: 'Ravi', rating: 1000, blurb: 'School chess club captain. Spots forks from a mile away.', face: { bg: 4, skin: 3, hair: 0, style: 4, eyes: 0, mouth: 0, acc: 4 }, level: BotPlay.LEVELS.ravi },
-    { id: 'selma', name: 'Selma', rating: 1200, blurb: 'Solid and patient. Waits for you to make the mistake.', face: { bg: 6, skin: 1, hair: 4, style: 5, eyes: 2, mouth: 1, acc: 0 }, level: BotPlay.LEVELS.selma },
-    { id: 'hector', name: 'Hector', rating: 1400, blurb: 'Café regular. Plays the King’s Gambit and dares you to take it.', face: { bg: 7, skin: 4, hair: 1, style: 1, eyes: 3, mouth: 0, acc: 0 }, level: BotPlay.LEVELS.hector },
-    { id: 'yuki', name: 'Yuki', rating: 1600, blurb: 'Studies endgames on the train. Will grind you down.', face: { bg: 8, skin: 5, hair: 0, style: 2, eyes: 0, mouth: 1, acc: 1 }, level: BotPlay.LEVELS.yuki },
-    { id: 'dmitri', name: 'Dmitri', rating: 1800, blurb: 'Club champion three years running. Calculates everything.', face: { bg: 10, skin: 0, hair: 5, style: 1, eyes: 3, mouth: 1, acc: 0 }, level: BotPlay.LEVELS.dmitri },
-    { id: 'wren', name: 'Wren', rating: 2000, blurb: 'A titled player who streams blitz at 3am.', face: { bg: 9, skin: 2, hair: 7, style: 5, eyes: 1, mouth: 0, acc: 4 }, level: BotPlay.LEVELS.wren },
-    { id: 'atlas', name: 'Atlas', rating: 2300, blurb: 'The engine at full strength. Good luck.', face: { bg: '#2b2f36', skin: 0, hair: 5, style: 0, eyes: 3, mouth: 1, acc: 3 }, level: BotPlay.LEVELS.atlas },
+    { id: 'juniper', name: 'Juniper', rating: 450, blurb: 'Plays fast, loves attacking, forgets to defend.', face: { bg: 1, skin: 1, hair: 2, style: 2, eyes: 0, mouth: 0, acc: 5 }, level: BotPlay.LEVELS.juniper },
+    { id: 'otto', name: 'Otto', rating: 650, blurb: 'A retired postman who plays in the park every Sunday.', face: { bg: 2, skin: 0, hair: 6, style: 1, eyes: 3, mouth: 1, acc: 1 }, level: BotPlay.LEVELS.otto },
+    { id: 'mabel', name: 'Mabel', rating: 850, blurb: 'Knows the openings by name. The middle of the game, less so.', face: { bg: 3, skin: 2, hair: 0, style: 2, eyes: 1, mouth: 0, acc: 0 }, level: BotPlay.LEVELS.mabel },
+    { id: 'ravi', name: 'Ravi', rating: 1050, blurb: 'School chess club captain. Spots forks from a mile away.', face: { bg: 4, skin: 3, hair: 0, style: 4, eyes: 0, mouth: 0, acc: 4 }, level: BotPlay.LEVELS.ravi },
+    { id: 'selma', name: 'Selma', rating: 1250, blurb: 'Solid and patient. Waits for you to make the mistake.', face: { bg: 6, skin: 1, hair: 4, style: 5, eyes: 2, mouth: 1, acc: 0 }, level: BotPlay.LEVELS.selma },
+    { id: 'hector', name: 'Hector', rating: 1450, blurb: 'Café regular. Plays the King’s Gambit and dares you to take it.', face: { bg: 7, skin: 4, hair: 1, style: 1, eyes: 3, mouth: 0, acc: 0 }, level: BotPlay.LEVELS.hector },
+    { id: 'yuki', name: 'Yuki', rating: 1650, blurb: 'Studies endgames on the train. Will grind you down.', face: { bg: 8, skin: 5, hair: 0, style: 2, eyes: 0, mouth: 1, acc: 1 }, level: BotPlay.LEVELS.yuki },
+    { id: 'dmitri', name: 'Dmitri', rating: 1900, blurb: 'Club champion three years running. Calculates everything.', face: { bg: 10, skin: 0, hair: 5, style: 1, eyes: 3, mouth: 1, acc: 0 }, level: BotPlay.LEVELS.dmitri },
+    { id: 'wren', name: 'Wren', rating: 2100, blurb: 'A titled player who streams blitz at 3am.', face: { bg: 9, skin: 2, hair: 7, style: 5, eyes: 1, mouth: 0, acc: 4 }, level: BotPlay.LEVELS.wren },
+    { id: 'atlas', name: 'Atlas', rating: 2350, blurb: 'Calculates deep and almost never blunders.', face: { bg: '#2b2f36', skin: 0, hair: 5, style: 0, eyes: 3, mouth: 1, acc: 1 }, level: BotPlay.LEVELS.atlas },
+    { id: 'titan', name: 'Titan', rating: 2800, blurb: 'The engine at full strength – the hardest opponent here.', face: { bg: '#1b2433', skin: 2, hair: 6, style: 4, eyes: 3, mouth: 1, acc: 3 }, level: BotPlay.LEVELS.titan },
   ];
   /* what each bot says during a game: hello, gotcha (it took a piece), ouch (it lost one), check, win, lose, draw */
   const CHAT = {
@@ -168,6 +174,7 @@
     dmitri: { hello: 'I have calculated many games. Begin.', gotcha: 'As calculated.', ouch: '…I missed that.', check: 'Check.', win: 'The calculation was correct.', lose: 'Remarkable. I must recalculate.', draw: 'Equal. As expected.' },
     wren: { hello: 'gl hf!', gotcha: 'free piece, ty', ouch: 'oof, nice shot', check: 'check :)', win: 'gg wp', lose: 'gg, you’re cracked', draw: 'gg, peace' },
     atlas: { hello: 'Searching… ready.', gotcha: 'Evaluation improved.', ouch: 'Unexpected.', check: 'Check.', win: 'Checkmate was inevitable.', lose: 'I lost? Well played, human.', draw: 'Draw.' },
+    titan: { hello: 'Full power. Let’s see what you’ve got.', gotcha: 'Calculated.', ouch: 'Interesting choice…', check: 'Check.', win: 'As expected.', lose: 'Incredible. You beat the full engine!', draw: 'A draw against me is a great result.' },
   };
   for (const b of BOTS) { b.faceSvg = face(b.face); b.isBot = true; b.chat = CHAT[b.id]; }
 

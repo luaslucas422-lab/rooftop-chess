@@ -6,8 +6,14 @@
   "scripts": {
     "start": "node server.js",
     "test": "node test/chess.test.js && node test/engine.test.js && node test/online.test.js",
-    "puzzles": "node tools/make-puzzles.js"
+    "puzzles": "node tools/make-puzzles.js",
+    "test:browser": "node test/browser.test.js"
   },
-  "engines": { "node": ">=18" },
-  "dependencies": { "ws": "^8.18.0", "pg": "^8.13.1" }
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "pg": "^8.13.1"
+  }
 }

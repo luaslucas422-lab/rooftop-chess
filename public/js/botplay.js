@@ -9,18 +9,21 @@
   'use strict';
   /* depth: how far ahead it looks · noise: how loosely it picks between moves (in centipawns) · blunder: chance of a random move
      pv: how many candidate moves it weighs · nodes / time: search budget for the strong bots · book: chance of playing a known opening move */
+  /* Tuned with tools/calibrate-bots.js so each bot beats the one below it about three games in four
+     (roughly 200 rating points a step). The ratings shown in the app come from those measurements. */
   const LEVELS = {
-    pip: { depth: 1, noise: 320, blunder: 0.3 },
-    juniper: { depth: 1, noise: 190, blunder: 0.12, book: 0.3 },
-    otto: { depth: 2, noise: 140, blunder: 0.06, book: 0.5, mateSense: true },
-    mabel: { depth: 2, noise: 95, blunder: 0.03, book: 0.65, mateSense: true },
-    ravi: { depth: 2, noise: 60, blunder: 0.012, book: 0.75, mateSense: true },
-    selma: { depth: 3, pv: 5, noise: 42, book: 0.8, mateSense: true },
-    hector: { depth: 3, pv: 4, noise: 26, book: 0.85, mateSense: true },
-    yuki: { depth: 4, pv: 4, noise: 16, book: 0.9, mateSense: true },
-    dmitri: { nodes: 120000, book: 0.9 },
-    wren: { nodes: 450000, book: 0.9 },
-    atlas: { time: 2500, book: 0.9 },
+    pip: { depth: 1, noise: 280, blunder: 0.25 },
+    juniper: { depth: 1, noise: 210, blunder: 0.14, book: 0.3 },
+    otto: { depth: 1, noise: 130, blunder: 0.07, book: 0.5, mateSense: true },
+    mabel: { depth: 2, noise: 135, blunder: 0.052, book: 0.65, mateSense: true },
+    ravi: { depth: 2, noise: 100, blunder: 0.035, book: 0.75, mateSense: true },
+    selma: { depth: 2, noise: 75, blunder: 0.02, book: 0.8, mateSense: true },
+    hector: { depth: 2, noise: 50, blunder: 0.008, book: 0.85, mateSense: true },
+    yuki: { nodes: 600, book: 0.9 },
+    dmitri: { nodes: 900, book: 0.9 },
+    wren: { nodes: 1500, book: 0.9 },
+    atlas: { nodes: 2400, book: 0.9 },
+    titan: { time: 2500, nodes: 1500000, book: 0.9 },
   };
   function gauss(rand) { let u = 0, v = 0; while (!u) u = rand(); while (!v) v = rand(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v); }
 

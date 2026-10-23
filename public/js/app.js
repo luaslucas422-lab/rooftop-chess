@@ -63,12 +63,13 @@
       '<span class="chip net"></span><button class="iconbtn" data-go="settings" aria-label="Settings">' + icon('gear') + '</button></div>' +
       (og ? '<button class="banner" data-a="return" style="width:100%;color:inherit;text-align:left"><b class="grow">Your game vs ' + esc(og.players[og.me === 'w' ? 'b' : 'w'].name) + ' is on</b><span class="btn sm primary">Return</span></button>' : '') +
       (curBot && !og ? '<div class="banner"><span class="av" style="width:36px;height:36px">' + curBot.faceSvg + '</span><div class="grow"><b>Unfinished game vs ' + esc(curBot.name) + '</b><div class="small muted">' + cur.moves.length + ' moves played</div></div><button class="btn sm primary" data-a="resume">Continue</button></div>' : '') +
+      installBanner() +
       '<div class="hero"><svg class="skyline" viewBox="0 0 200 90"><path fill="currentColor" d="M0 90V60h14V40h10v20h8V30l8-8 8 8v30h10V48h18v42zm88 0V36h8V24h10v12h8v54zm34 0V56h12V44h4v-8h6v8h4v12h12v34zm44 0V30l10-10 10 10v60z"/></svg>' +
       '<div class="small muted">Rated games against real people</div><div style="font-size:22px;font-weight:900;margin:2px 0 12px">Play chess online</div>' +
       '<button class="btn primary big" data-go="online">' + icon('globe') + ' Play Online</button>' +
       '<div class="row gap" style="margin-top:10px;font-size:13px"><span class="chip">Bullet ' + rr(R.bullet) + '</span><span class="chip">Blitz ' + rr(R.blitz) + '</span><span class="chip">Rapid ' + rr(R.rapid) + '</span></div></div>' +
       '<div class="tiles" style="margin-top:12px">' +
-      '<button class="tile" data-go="bots"><span class="ic" style="background:#7aa7f022;color:#7aa7f0">' + icon('robot') + '</span><span><b>Play a bot</b><small>11 characters, 250 to 2300</small></span></button>' +
+      '<button class="tile" data-go="bots"><span class="ic" style="background:#7aa7f022;color:#7aa7f0">' + icon('robot') + '</span><span><b>Play a bot</b><small>12 characters, 250 to 2800</small></span></button>' +
       '<button class="tile" data-go="friend"><span class="ic" style="background:#6cc4a122;color:#6cc4a1">' + icon('friend') + '</span><span><b>Play a friend</b><small>Send a code or link</small></span></button>' +
       '<button class="tile" data-go="local"><span class="ic" style="background:#e27fa722;color:#e27fa7">' + icon('flip') + '</span><span><b>Pass & play</b><small>Two players, one phone</small></span></button>' +
       '<button class="tile" data-go="analysis"><span class="ic" style="background:#f2cc5b22;color:#f2cc5b">' + icon('chart') + '</span><span><b>Analysis</b><small>Engine, PGN & FEN</small></span></button>' +
@@ -82,7 +83,9 @@
     if (Net.state === 'online') Net.raw({ t: 'stats' });
     el.addEventListener('click', e => {
       const g = e.target.closest('[data-go]'); if (g) return App.go(g.dataset.go);
-      const a = e.target.closest('[data-a]'); if (a) { const k = a.dataset.a; if (k === 'return') { Play.current = Play.player; App.go('game'); } if (k === 'resume') Play.resumeBot(); if (k === 'daily') App.go('puzzle', { mode: 'daily' }); }
+      const a = e.target.closest('[data-a]'); if (a) { const k = a.dataset.a; if (k === 'return') { Play.current = Play.player; App.go('game'); } if (k === 'resume') Play.resumeBot(); if (k === 'daily') App.go('puzzle', { mode: 'daily' });
+        if (k === 'install') install();
+        if (k === 'noinstall') { Store.data.installHidden = true; Store.save(); const bn = $('.install-banner', el); if (bn) bn.remove(); } }
       const gi = e.target.closest('[data-game]'); if (gi) gameSheet(gi.dataset.game);
     });
     return () => { off(); off2(); };
@@ -399,7 +402,17 @@
       }
     });
   }
-  addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; });
+  addEventListener('beforeinstallprompt', e => { e.preventDefault(); installEvt = e; if (current.route === 'home' && !$('.install-banner')) App.go('home', {}, true); });
+  addEventListener('appinstalled', () => { installEvt = null; Store.data.installHidden = true; Store.save(); toast('Installed! Find Rooftop Chess on your home screen.'); });
+  const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const isIos = () => /iphone|ipad|ipod/i.test(navigator.userAgent);
+  /* a gentle nudge to install the app (until it's installed or dismissed) */
+  function installBanner() {
+    if (Store.data.installHidden || isStandalone() || !(installEvt || isIos())) return '';
+    return '<div class="banner install-banner"><img src="icons/icon.svg" width="38" height="38" alt="" style="border-radius:10px"><div class="grow"><b>Get the app</b><div class="small muted">' +
+      (installEvt ? 'Install Rooftop Chess on this device – it works offline too.' : 'Tap Share, then “Add to Home Screen”.') + '</div></div>' +
+      (installEvt ? '<button class="btn sm primary" data-a="install">Install</button>' : '') + '<button class="iconbtn" data-a="noinstall" aria-label="Not now">' + icon('x') + '</button></div>';
+  }
   function install() {
     if (installEvt) { installEvt.prompt(); installEvt.userChoice.finally(() => { installEvt = null; }); return; }
     if (matchMedia('(display-mode: standalone)').matches) return toast('You’re already using the app');
