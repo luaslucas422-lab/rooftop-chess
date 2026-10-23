@@ -117,7 +117,7 @@
       const before = P.r;
       Object.assign(P, Rating.update(P, { r: current.rating, rd: 80, at: Date.now() }, score));
       delta = Math.round(P.r) - Math.round(before);
-      Store.save(); showRating();
+      Store.logRating('puzzle', P.r); showRating();
     }
     function log(ok) { P.log = P.log || []; P.log.unshift({ id: current.id, ok, at: Date.now(), r: current.rating }); if (P.log.length > 60) P.log.length = 60; }
     function showRating() { setAll(el, '.pz-rating', mode === 'rated' ? Math.round(P.r) + (delta != null ? ' <span class="' + (delta >= 0 ? 'good' : 'bad') + '">' + (delta >= 0 ? '+' : '') + delta + '</span>' : '') : current ? current.rating : ''); }

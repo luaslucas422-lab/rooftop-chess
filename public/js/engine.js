@@ -149,6 +149,7 @@
       this.moveLists = []; this.moveScores = [];
       for (let i = 0; i < MAX_PLY + 8; i++) { this.moveLists.push([]); this.moveScores.push(new Int32Array(256)); }
       this.repLo = new Int32Array(1200); this.repHi = new Int32Array(1200); this.repLen = 0;
+      this.checkMask = 1023;
     }
     clear() { this.ttKey.fill(0); this.ttFlag.fill(0); this.history.fill(0); }
 
@@ -188,7 +189,7 @@
     }
 
     quiesce(pos, alpha, beta, ply) {
-      if ((++this.nodes & 1023) === 0) this.checkTime();
+      if ((++this.nodes & this.checkMask) === 0) this.checkTime();
       if (this.stopped) return 0;
       if (ply >= MAX_PLY - 2) return evaluate(pos);
       const inCheck = pos.inCheck();
@@ -224,7 +225,7 @@
     }
 
     search(pos, depth, alpha, beta, ply, allowNull) {
-      if ((++this.nodes & 1023) === 0) this.checkTime();
+      if ((++this.nodes & this.checkMask) === 0) this.checkTime();
       if (this.stopped) return 0;
       this.pvLen[ply] = ply;
       if (pos.halfmove >= 100 || this.isRepetition(pos)) return 0;
@@ -340,6 +341,7 @@
       const start = Date.now();
       this.deadline = opts.time ? start + opts.time : 0;
       this.maxNodes = opts.nodes || 0;
+      this.checkMask = this.maxNodes && this.maxNodes < 100000 ? 31 : 1023;   // small budgets are checked often, so they're exact
       this.nodes = 0; this.stopped = false;
       this.killers.fill(0);
       for (let k = 0; k < this.history.length; k++) this.history[k] >>= 2;
@@ -406,7 +408,7 @@
     /* score every legal move at a fixed depth (bots use this to play like people, picking good-but-not-perfect moves) */
     scoreMoves(pos, depth, opts) {
       opts = opts || {};
-      this.deadline = opts.time ? Date.now() + opts.time : 0; this.maxNodes = 0; this.nodes = 0; this.stopped = false;
+      this.deadline = opts.time ? Date.now() + opts.time : 0; this.maxNodes = 0; this.nodes = 0; this.stopped = false; this.checkMask = 1023;
       if (opts.history) this.setHistory(opts.history);
       const baseRep = this.repLen;
       this.repLo[this.repLen] = pos.hlo; this.repHi[this.repLen++] = pos.hhi;

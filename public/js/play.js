@@ -337,6 +337,7 @@
       this.game.finish(m.winner, m.reason);
       this.ratingChange = m.ratings || null;
       this.serverPgn = m.pgn;
+      if (this.ratingChange && this.me && this.cat) { Store.logRating(this.cat, this.ratingChange[this.me].now); Net.raw({ t: 'me' }); }   // refresh the ratings shown around the app
       this.end({ over: true, winner: m.winner, reason: m.reason, result: m.result });
     }
 

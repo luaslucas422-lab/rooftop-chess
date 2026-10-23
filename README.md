@@ -33,7 +33,7 @@ to a Postgres database and ratings are stored there too. Note that Render's free
 - **Play a friend** – a 6-letter code or a share link; casual or rated.
 - **Play a bot** – 11 characters from 250 to 2300, with takebacks, hints and "beaten" badges.
 - **Pass & play** – two people on one device, with an optional clock.
-- **Puzzles** – 516 puzzles with your own puzzle rating, Puzzle Rush (3 minutes, 3 strikes), a daily puzzle and themes.
+- **Puzzles** – 831 puzzles with your own puzzle rating, Puzzle Rush (3 minutes, 3 strikes), a daily puzzle and themes.
 - **Game Review** – every move rated (best, brilliant, great, mistake, blunder…) with accuracy, an eval graph and an explanation.
 - **Analysis board** – engine with the top 3 lines and an eval bar; load or copy PGN and FEN.
 - **Learn** – "how the pieces move" lessons, checkmate drills against the engine, and the rules.

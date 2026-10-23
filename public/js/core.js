@@ -22,6 +22,8 @@
     save(now) { clearTimeout(saveT); const w = () => { try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) {} }; if (now) w(); else saveT = setTimeout(w, 150); },
     reset() { data = blank(); this.save(true); },
     addGame(rec) { data.games.unshift(rec); if (data.games.length > 150) data.games.length = 150; this.save(); },
+    /* rating history for the graph on the Me tab. kind: 'puzzle' | 'bullet' | 'blitz' | 'rapid' */
+    logRating(kind, r) { const log = data.ratingLog || (data.ratingLog = []); log.push({ t: Date.now(), k: kind, r: Math.round(r) }); if (log.length > 600) log.splice(0, log.length - 600); this.save(); },
   };
 
   /* ---------- tiny UI helpers ---------- */

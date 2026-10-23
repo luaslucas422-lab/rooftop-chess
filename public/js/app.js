@@ -272,11 +272,26 @@
       '<button class="btn sm" style="margin-top:6px" data-a="name">Edit name</button></div><button class="iconbtn" data-go="settings" aria-label="Settings">' + icon('gear') + '</button></div>' +
       '<div class="section-title">Ratings</div><div class="stat-grid">' + card('Bullet', rr(R.bullet), (R.bullet ? R.bullet.games : 0) + ' games') + card('Blitz', rr(R.blitz), (R.blitz ? R.blitz.games : 0) + ' games') + card('Rapid', rr(R.rapid), (R.rapid ? R.rapid.games : 0) + ' games') +
       card('Puzzles', Math.round(P.r), P.solved + ' solved') + card('Rush', Store.data.rush.best, 'best score') + card('Record', w + '/' + l + '/' + d, 'win/loss/draw') + '</div>' +
+      '<div class="section-title">Rating history</div><div class="card"><div class="seg" style="margin-bottom:10px">' + [['puzzle', 'Puzzles'], ['bullet', 'Bullet'], ['blitz', 'Blitz'], ['rapid', 'Rapid']].map(([k, n]) => '<button data-hist="' + k + '">' + n + '</button>').join('') + '</div><div class="hist"></div></div>' +
       '<div class="section-title">Bots beaten</div><div class="row wrap gap4">' + BOTS.map(b => '<span title="' + esc(b.name) + '" style="position:relative;opacity:' + (Store.data.beaten[b.id] ? 1 : .35) + '"><span class="av" style="width:44px;height:44px">' + b.faceSvg + '</span></span>').join('') + '</div>' +
       '<div class="section-title">Games</div>' + (G.length ? '<div class="list">' + G.slice(0, 8).map(gameItem).join('') + '</div>' + (G.length > 8 ? '<button class="btn ghost block" style="margin-top:10px" data-go="games">All ' + G.length + ' games</button>' : '') : '<div class="card empty">No games yet.</div>') +
       '<div class="tiles" style="margin-top:16px"><button class="tile" data-go="leaders"><span class="ic" style="background:#f2cc5b22;color:#f2cc5b">🏆</span><span><b>Leaderboard</b><small>Top online players</small></span></button>' +
       '<button class="tile" data-a="install"><span class="ic" style="background:#ff9f4322;color:var(--accent)">' + icon('plus') + '</span><span><b>Install app</b><small>Add to your home screen</small></span></button></div></div>';
+    const drawHist = kind => {
+      for (const b of $$('[data-hist]', el)) b.classList.toggle('on', b.dataset.hist === kind);
+      const pts = (Store.data.ratingLog || []).filter(x => x.k === kind).slice(-120), box = $('.hist', el);
+      if (pts.length < 2) { box.innerHTML = '<p class="small muted center" style="margin:14px 0">' + (kind === 'puzzle' ? 'Solve a few rated puzzles' : 'Play a few rated ' + kind + ' games') + ' to see your graph.</p>'; return; }
+      const W = 300, H = 90, rs = pts.map(p => p.r), lo = Math.min(...rs) - 10, hi = Math.max(...rs) + 10;
+      const xy = pts.map((p, i) => [i / (pts.length - 1) * W, H - (p.r - lo) / (hi - lo) * H]);
+      const line = xy.map((q, i) => (i ? 'L' : 'M') + q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join(' ');
+      box.innerHTML = '<div class="row" style="margin-bottom:6px"><b style="font-size:22px">' + rs[rs.length - 1] + '</b><span class="small muted right">best ' + Math.max(...rs) + ' · low ' + Math.min(...rs) + '</span></div>' +
+        '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" style="width:100%;height:90px;display:block"><path d="' + line + ' L' + W + ' ' + H + ' L0 ' + H + ' Z" fill="rgba(255,159,67,.15)"/><path d="' + line + '" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>' +
+        '<div class="row tiny faint" style="margin-top:4px"><span>' + new Date(pts[0].t).toLocaleDateString() + '</span><span class="right">' + new Date(pts[pts.length - 1].t).toLocaleDateString() + '</span></div>';
+    };
+    const kinds = ['puzzle', 'blitz', 'rapid', 'bullet'];
+    drawHist(kinds.find(k => (Store.data.ratingLog || []).filter(x => x.k === k).length >= 2) || 'puzzle');
     el.addEventListener('click', async e => {
+      const h = e.target.closest('[data-hist]'); if (h) return drawHist(h.dataset.hist);
       const g = e.target.closest('[data-go]'); if (g) return App.go(g.dataset.go);
       const gi = e.target.closest('[data-game]'); if (gi) return gameSheet(gi.dataset.game);
       const a = e.target.closest('[data-a]'); if (!a) return;
