@@ -6,11 +6,16 @@ It's a web app you install to your home screen, plus the small server that runs 
 ## Get it on your phone
 1. Put the server online (below). You get a link like `https://rooftop-chess.onrender.com`.
 2. Open that link on your phone. The app is at `/chess/` (the plain link takes you there).
-3. **Android (Chrome):** tap **Me → Install app** (or ⋮ menu → Install app). **iPhone (Safari):** **Share → Add to Home Screen**.
+3. **Android (Chrome):** tap **Install** on the "Get the app" banner (or ⋮ menu → Install app). **iPhone (Safari):** **Share → Add to Home Screen**.
 
 It opens full screen like any app. Bots, puzzles, lessons and analysis work offline; online play needs the server.
 
 ## Put it online with Render (free)
+The easy way – click this, sign in, and press **Deploy**:
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/luaslucas422-lab/rooftop-chess)
+
+Or by hand:
 1. Sign in at render.com with GitHub.
 2. **New → Blueprint** → pick this repository. It reads `render.yaml` and sets everything up, including `CHESS_SECRET`.
    (Or **New → Web Service** with Build command `npm install` · Start command `npm start` · Instance type Free,
@@ -22,7 +27,7 @@ On the free plan the server goes to sleep after 15 minutes with nobody connected
 ### Where ratings are kept
 Render's free plan wipes the server's files whenever it restarts or goes to sleep. So besides the server's own copy,
 each player's phone keeps a **rating card** – their ratings, signed with `CHESS_SECRET`. After a restart the phone hands the card
-back and the rating returns. Nobody can make or change a card without the secret, and a card only works for the phone it was made for.
+back and the rating returns. Nobody can make or change a card without the secret, and a card only works for the player it was made for.
 Keep `CHESS_SECRET` the same, or old cards stop working (ratings then start again from 1200).
 
 If you want a permanent leaderboard (it otherwise only lists people who have connected since the last restart), set `DATABASE_URL`
