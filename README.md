@@ -34,15 +34,16 @@ If you want a permanent leaderboard (it otherwise only lists people who have con
 to a Postgres database and ratings are stored there too. Note that Render's free Postgres databases expire after 30 days.
 
 ## What's in it
-- **Play online** – bullet, blitz and rapid (1|0 up to 30|0): matchmaking, clocks kept on the server, Glicko ratings, draw offers, rematches, preset quick chat, premoves, leaderboard.
+- **Play online** – bullet, blitz and rapid (1|0 up to 30|0): matchmaking, clocks kept on the server (with a little time given back for slow connections), Glicko ratings, draw offers, rematches, preset quick chat, premoves, leaderboard.
 - **Play a friend** – a 6-letter code or a share link; casual or rated.
 - **Play a bot** – 12 characters from 250 to 2800, with takebacks, hints, chatty personalities and "beaten" badges. Their ratings come from playing them against each other (each beats the one below 3 or 4 games in 5, see below); Titan, the full-strength engine, is an estimate.
 - **Pass & play** – two people on one device, with an optional clock.
-- **Puzzles** – 831 puzzles with your own puzzle rating, Puzzle Rush (3 minutes, 3 strikes), a daily puzzle and themes.
-- **Game Review** – every move rated (best, brilliant, great, mistake, blunder…) with accuracy, an eval graph and an explanation.
-- **Analysis board** – engine with the top 3 lines and an eval bar; load or copy PGN and FEN.
+- **Puzzles** – 831 puzzles with your own puzzle rating (easier / normal / harder), Puzzle Rush (3 minutes, 3 strikes), a daily puzzle and themes.
+- **Game Review** – every move rated (best, brilliant, great, mistake, blunder…) with accuracy, an eval graph and an explanation; jump between key moments, retry your mistakes, and play through the engine's best line.
+- **Analysis board** – engine with the top 3 lines and an eval bar, known opening moves, a position editor, and PGN/FEN import and export. On a computer, right-click to draw arrows.
 - **Learn** – "how the pieces move" lessons, checkmate drills against the engine, and the rules.
 - **Watch** – spectate live games, or set two bots against each other.
+- **Me** – ratings and a rating graph, every game you've played (review, analyse, or copy them all as PGN), bots beaten, settings (6 board colors, light/dark, sounds, vibration…).
 
 ## How strong the bots are
 Measured with `tools/calibrate-bots.js` (30–44 games per pair). Ratings add up the steps from Pip, set at 250.
@@ -66,13 +67,13 @@ The searching bots use a fixed number of positions, not a fixed time, so they're
 These are ratings against each other; how they compare to people's ratings is a rough guess.
 
 ## Files
-- `chess/` – the app (plain HTML/CSS/JS, no build step). Rules: `chess/js/chess.js`. Engine: `chess/js/engine.js`, run in a background thread by `engine-worker.js`.
+- `public/` – the app (plain HTML/CSS/JS, no build step). Rules: `public/js/chess.js`. Engine: `public/js/engine.js`, run in a background thread by `engine-worker.js`.
 - `server.js` – serves the app and connects online players. `chess-server.js` – matchmaking, clocks, ratings; every move is checked with the same `chess.js` the app uses.
 - `filter.js` – keeps player names friendly (no links, contact details or rude words).
 - `public/js/botplay.js` – how each bot picks its moves. `tools/calibrate-bots.js` plays bots against each other to measure them:
   `node tools/calibrate-bots.js play hector yuki 40 out.json`, then `node tools/calibrate-bots.js report out.json`.
 - `tools/make-puzzles.js` – makes the puzzles. Bots play each other, and when one blunders the engine checks that only one move wins.
-  Run `node tools/make-puzzles.js <seed> <games> out.json` (several at once is faster), then `node tools/make-puzzles.js merge chess/js/puzzles.js out*.json`.
+  Run `node tools/make-puzzles.js <seed> <games> out.json` (several at once is faster), then `node tools/make-puzzles.js merge public/js/puzzles.js out*.json`.
 - `test/` – `npm test` runs the rules tests (perft move counts, SAN/PGN, draws, every opening line and puzzle), the engine tests, and an online test with two players
   (including a server restart). `npm run test:browser` plays through the app in a headless browser (needs Playwright). GitHub runs both on every push.
 

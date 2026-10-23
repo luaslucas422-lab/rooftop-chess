@@ -337,7 +337,7 @@
       '<div class="tc-label">App theme</div><div class="seg">' + [['dark', 'Dark'], ['light', 'Light']].map(([v, n]) => '<button data-apptheme="' + v + '" class="' + (s.theme === v ? 'on' : '') + '">' + n + '</button>').join('') + '</div>' +
       (full ? '<div class="section-title">Online server</div><div class="card"><p class="small muted">Leave empty to use the server this app came from. If you opened the app from somewhere else, paste your Rooftop server link (like https://your-server.onrender.com).</p>' +
         '<div class="row gap"><input class="field" id="server" placeholder="This site" value="' + esc(s.server) + '"><button class="btn" data-a="server">Save</button></div><p class="small" style="margin:8px 0 0" id="srvstate"></p></div>' +
-        '<div class="section-title">Your data</div><div class="list"><button class="item" data-a="export"><span class="grow">Copy a backup of my data</span></button><button class="item" data-a="import"><span class="grow">Restore from a backup</span></button><button class="item" data-a="reset"><span class="grow bad">Reset everything on this device</span></button></div>' +
+        '<div class="section-title">Your data</div><div class="list"><button class="item" data-a="pgns"><span class="grow">Copy all my games (PGN)</span><span class="small muted">' + Store.data.games.length + '</span></button><button class="item" data-a="export"><span class="grow">Copy a backup of my data</span></button><button class="item" data-a="import"><span class="grow">Restore from a backup</span></button><button class="item" data-a="reset"><span class="grow bad">Reset everything on this device</span></button></div>' +
         '<p class="faint small center" style="margin-top:18px">Rooftop Chess ' + VERSION + ' · pieces, characters and puzzles made for this app</p>' : '');
   }
   function bindSettings(root, redraw, onChange) {
@@ -358,6 +358,7 @@
       const a = e.target.closest('[data-a]'); if (!a) return;
       if (a.dataset.a === 'server') { S().server = $('#server', el).value.trim(); Store.save(); Net.reconnect(); toast('Saved'); }
       if (a.dataset.a === 'export') UI.copy(JSON.stringify(Store.data));
+      if (a.dataset.a === 'pgns') { if (!Store.data.games.length) return toast('No games yet'); UI.copy(Store.data.games.slice().reverse().map(g => g.pgn.trim()).join('\n\n') + '\n'); }
       if (a.dataset.a === 'import') {
         const s = sheet('<h3>Restore a backup</h3><p class="small muted">Paste the backup text. This replaces what’s on this device.</p><textarea class="field"></textarea><button class="btn primary block" style="margin-top:10px" data-ok>Restore</button>');
         $('[data-ok]', s).onclick = () => { try { const d = JSON.parse($('textarea', s).value); if (!d || d.v !== 1 || !d.profile) throw 0; localStorage.setItem('rooftop-chess.v1', JSON.stringify(d)); location.reload(); } catch (x) { toast('That isn’t a Rooftop Chess backup'); } };

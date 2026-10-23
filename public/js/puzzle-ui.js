@@ -13,8 +13,9 @@
   const dayNumber = () => Math.floor((Date.now() - new Date().getTimezoneOffset() * 60000) / 86400000);
   function daily() { const pool = ALL.filter(p => p.rating >= 1000 && p.rating <= 1900); if (!pool.length) return ALL[0]; return pool[(dayNumber() * 7919) % pool.length]; }
 
+  const OFFSET = { easier: -200, normal: 0, harder: 200 };
   function pickRated() {
-    const P = Store.data.puzzles, r = P.r;
+    const P = Store.data.puzzles, r = P.r + (OFFSET[Store.data.settings.puzzleLevel] || 0);
     let pool = ALL.filter(p => !P.seen[p.id]);
     if (pool.length < 5) { P.seen = {}; pool = ALL.slice(); }
     pool.sort((a, b) => Math.abs(a.rating - r) - Math.abs(b.rating - r));
@@ -222,7 +223,8 @@
     el.innerHTML = '<div class="page"><h1>Puzzles</h1>' +
       '<div class="hero"><div class="row gap"><div class="grow"><div class="small muted">Puzzle rating</div><div style="font-size:34px;font-weight:900">' + Math.round(P.r) + (Rating.provisional(P) ? '<span class="muted" style="font-size:18px">?</span>' : '') + '</div>' +
       '<div class="small muted">' + P.solved + ' solved · streak ' + P.streak + ' · best streak ' + P.bestStreak + '</div></div></div>' +
-      '<button class="btn primary big" style="margin-top:14px" data-go="puzzle">Solve puzzles</button></div>' +
+      '<div class="seg" style="margin-top:14px">' + [['easier', 'Easier'], ['normal', 'Normal'], ['harder', 'Harder']].map(([k, n]) => '<button data-level="' + k + '" class="' + ((Store.data.settings.puzzleLevel || 'normal') === k ? 'on' : '') + '">' + n + '</button>').join('') + '</div>' +
+      '<button class="btn primary big" style="margin-top:10px" data-go="puzzle">Solve puzzles</button></div>' +
       '<div class="tiles" style="margin-top:12px">' +
       '<button class="tile" data-go="rush"><span class="ic" style="background:#e2544b22;color:#ef6b5f">⚡</span><span><b>Puzzle Rush</b><small>3 minutes, 3 strikes · best ' + R.best + '</small></span></button>' +
       '<button class="tile" data-go="daily"><span class="ic" style="background:#f2c14e22;color:#f2c14e">★</span><span><b>Daily puzzle</b><small>' + (dailyDone ? 'Solved today ✓' : 'A new one every day') + '</small></span></button></div>' +
@@ -231,6 +233,8 @@
       (P.log && P.log.length ? '<div class="section-title">Recent</div><div class="rush-log" style="padding:0">' + P.log.slice(0, 40).map(x => '<i class="' + (x.ok ? '' : 'x') + '" title="' + x.r + '"></i>').join('') + '</div>' : '') +
       '<p class="faint small" style="margin-top:18px">' + ALL.length + ' puzzles, each one found by the engine in real games between bots and double-checked so there’s only one winning move.</p></div>';
     el.addEventListener('click', e => {
+      const lv = e.target.closest('[data-level]');
+      if (lv) { Store.data.settings.puzzleLevel = lv.dataset.level; Store.save(); for (const b of $$('[data-level]', el)) b.classList.toggle('on', b === lv); return; }
       const t = e.target.closest('[data-pz]'); if (t) return App.go('puzzle', { mode: 'theme', theme: t.dataset.pz });
       const g = e.target.closest('[data-go]'); if (!g) return;
       if (g.dataset.go === 'daily') return App.go('puzzle', { mode: 'daily' });

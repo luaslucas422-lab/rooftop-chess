@@ -27,7 +27,6 @@ const S = new E.Searcher(20);
 const MB = E.MATE_BOUND;
 const VAL = [0, 100, 300, 320, 500, 900, 0];
 
-function histOf(g) { const { history } = E.replay(g.startFen, g.history.map(h => h.uci)); return history; }
 function posOf(g) { return E.replay(g.startFen, g.history.map(h => h.uci)); }
 function think(g, opts) { const { pos, history } = posOf(g); return S.think(pos, Object.assign({ history }, opts)); }
 
