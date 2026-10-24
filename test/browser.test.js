@@ -75,6 +75,17 @@ async function move(p, from, to) { await tap(p, from); await wait(60); await tap
   await a.evaluate(() => UI.closeSheet());
   console.log('coach ok');
 
+  // your own bots: up to three, and one plays a game
+  const mine = await a.evaluate(() => [1, 2, 3, 4].map(i => !!MyBots.save({ name: 'Mine ' + i, elo: 300 * i })));
+  assert.deepStrictEqual(mine, [true, true, true, false], 'no more than three bots each');
+  await a.evaluate(() => Play.startBot(findBot(MyBots.saved()[1].id), 'w', {}));
+  await a.waitForFunction(() => Play.current.el && Play.current.bot.mine && !document.querySelector('.sheet-wrap'));   // the new game is on screen
+  await move(a, 'e2', 'e4');
+  await a.waitForFunction(() => Play.current.game.history.length >= 2, null, { timeout: 15000 });
+  assert.strictEqual(await a.evaluate(() => Play.current.bot.level.elo), 600);
+  await a.evaluate(() => { for (const b of MyBots.saved().slice()) MyBots.remove(b.id); Store.data.current = null; App.go('home'); });
+  console.log('own bots ok');
+
   // a rated puzzle, solved with its own solution
   await a.evaluate(() => App.go('puzzle', { mode: 'rated' }));
   await a.waitForFunction(() => Puzzles.active && Puzzles.active.step === 1, null, { timeout: 10000 });

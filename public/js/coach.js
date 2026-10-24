@@ -218,7 +218,7 @@
   }
 
   /* ---------- the coach in a game (browser only) ---------- */
-  const FACE = { bg: '#2f6fd6', skin: 1, hair: 0, style: 1, eyes: 2, mouth: 0, acc: 1 };
+  const FACE = { bg: '#2f6fd6', skin: 1, hair: 0, style: 7, eyes: 0, mouth: 0, acc: 1, shirt: 3, iris: 1, nose: 0 };
   /* how she coaches. scale: how forgiving the ratings are (see grade) · help: threat warnings, the bot's slips and tips on your turn
      time: how long she looks at each position (ms). Every level stops the game on a mistake or worse – by that level's ratings. */
   const LEVELS = {

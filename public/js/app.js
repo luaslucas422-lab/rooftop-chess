@@ -59,7 +59,7 @@
     const p = Store.data.profile, cur = Store.data.current, og = Play.player && !Play.player.over ? Play.player : null;
     const R = Store.data.online.ratings || {};
     const hour = new Date().getHours(), hi = hour < 5 ? 'Up late' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
-    const curBot = cur && BOTS.find(b => b.id === cur.bot);
+    const curBot = cur && findBot(cur.bot);
     const recent = Store.data.games.slice(0, 4);
     const d = Puzzles.daily();
     el.innerHTML = '<div class="page">' +
@@ -99,7 +99,7 @@
     const res = g.winner ? (g.me ? (g.winner === g.me ? 'win' : 'loss') : 'draw') : 'draw';
     const label = g.reason === 'aborted' ? 'Aborted' : !g.me ? (g.result || '').replace('1/2-1/2', '½-½') : res === 'win' ? 'Won' : res === 'loss' ? 'Lost' : 'Draw';
     const sub = (g.mode === 'online' ? (g.rated ? 'Rated ' : 'Casual ') + (g.cat || '') + ' ' + (g.tc || '') : g.mode === 'bot' ? 'vs bot' : 'Pass & play' + (g.tc ? ' ' + g.tc : '')) + ' · ' + UI.ago(g.at);
-    const bot = opp && opp.bot && BOTS.find(b => b.id === opp.bot);
+    const bot = opp && opp.bot && findBot(opp.bot);
     return '<button class="item" data-game="' + esc(g.id) + '">' + (opp ? UI.avatarHtml(bot || opp, 38) : '<span class="av" style="width:38px;height:38px;display:grid;place-items:center">' + icon('flip') + '</span>') +
       '<div class="grow"><b class="ellipsis" style="display:block">' + esc(opp ? opp.name + (opp.rating ? ' (' + opp.rating + ')' : '') : g.white.name + ' vs ' + g.black.name) + '</b><div class="small muted ellipsis">' + esc(sub) + '</div></div>' +
       '<div class="col" style="align-items:flex-end;gap:2px"><span class="pill ' + (g.reason === 'aborted' ? 'draw' : res) + '">' + label + '</span>' + (g.delta != null ? '<span class="tiny ' + (g.delta >= 0 ? 'good' : 'bad') + '">' + (g.delta >= 0 ? '+' : '') + g.delta + '</span>' : '') + '</div></button>';
@@ -111,7 +111,7 @@
       '<button class="menu-item" data-k="del">' + icon('x') + 'Delete from history</button>');
     s.addEventListener('click', async e => {
       const b = e.target.closest('[data-k]'); if (!b) return; const k = b.dataset.k;
-      const players = { w: g.white.bot ? BOTS.find(x => x.id === g.white.bot) || g.white : g.white, b: g.black.bot ? BOTS.find(x => x.id === g.black.bot) || g.black : g.black };
+      const players = { w: g.white.bot ? findBot(g.white.bot) || g.white : g.white, b: g.black.bot ? findBot(g.black.bot) || g.black : g.black };
       if (k === 'review') { s.close(); App.go('review', { pgn: g.pgn, me: g.me, players }); }
       if (k === 'analysis') { s.close(); App.go('analysis', { pgn: g.pgn, flip: g.me === 'b' }); }
       if (k === 'pgn') UI.copy(g.pgn);
@@ -215,20 +215,62 @@
 
   /* ---------- bots ---------- */
   function bots(el, params) {
-    let sel = BOTS.find(b => b.id === Store.data.lastBot) || BOTS[1], color = Store.data.lastColor || 'r', saved = Store.data.coachLevel || (Store.data.coachOn === false ? 'off' : 'normal'),
+    let sel = findBot(Store.data.lastBot) || BOTS[1], color = Store.data.lastColor || 'r', saved = Store.data.coachLevel || (Store.data.coachOn === false ? 'off' : 'normal'),
       coach = params.coach ? (saved === 'off' ? 'beginner' : saved) : saved;   // off | beginner | normal | extreme
     const match = goodMatch();
     const draw = () => {
       el.innerHTML = top('Play a bot') + '<div class="page" style="padding-top:4px">' +
         '<div class="card row gap" style="align-items:flex-start"><span class="av" style="width:72px;height:72px">' + sel.faceSvg + '</span><div class="grow"><h2 style="margin:0">' + esc(sel.name) + ' <span class="muted" style="font-size:16px">' + sel.rating + '</span></h2><p class="muted small" style="margin:4px 0 0">' + esc(sel.blurb) + '</p>' +
-        (Store.data.beaten[sel.id] ? '<span class="chip acc" style="margin-top:6px">Beaten ✓</span>' : '') + '</div></div>' +
+        (Store.data.beaten[sel.id] ? '<span class="chip acc" style="margin-top:6px">Beaten ✓</span>' : '') + (sel.mine ? '<button class="btn sm" style="margin-top:8px" data-a="editbot">Edit bot</button>' : '') + '</div></div>' +
         (params.startFen ? '<p class="small muted" style="margin:10px 2px">Starting from the position you set up.</p>' : '') +
         '<div class="row gap" style="margin:12px 2px 0"><span class="muted small grow">Your bot rating' + (Store.data.botRating.games ? '' : ' – win or lose a game without help to get one') + '</span><b>' + botR() + '</b></div>' +
         '<div class="bot-grid" style="margin-top:12px">' + BOTS.map(b => '<button class="bot-card' + (b === sel ? ' on' : '') + '" data-bot="' + b.id + '">' + (Store.data.beaten[b.id] ? '<span class="won">✓</span>' : '') + '<span class="av" style="width:52px;height:52px">' + b.faceSvg + '</span><div class="nm">' + esc(b.name) + '</div><div class="rt">' + b.rating + '</div>' + (b === match ? '<div class="match">Good match</div>' : '') + '</button>').join('') + '</div>' +
+        myBotsHtml() +
         '<div class="tc-label">I play</div><div class="seg">' + [['w', 'White'], ['r', 'Random'], ['b', 'Black']].map(([k, n]) => '<button data-color="' + k + '" class="' + (color === k ? 'on' : '') + '">' + n + '</button>').join('') + '</div>' +
         coachPick() +
         '<button class="btn primary big" style="margin-top:16px" data-a="play">Play ' + esc(sel.name) + '</button></div>';
     };
+    /* your own bots (up to 3) and a card to make one */
+    function myBotsHtml() {
+      const mine = MyBots.list();
+      return '<div class="tc-label">My bots <span class="faint" style="font-weight:600">' + mine.length + ' of ' + MyBots.MAX + ' · only you can play them</span></div><div class="bot-grid">' +
+        mine.map(b => '<button class="bot-card' + (b.id === sel.id ? ' on' : '') + '" data-bot="' + b.id + '">' + (Store.data.beaten[b.id] ? '<span class="won">✓</span>' : '') + '<span class="av" style="width:52px;height:52px">' + b.faceSvg + '</span><div class="nm ellipsis">' + esc(b.name) + '</div><div class="rt">' + b.rating + '</div></button>').join('') +
+        (mine.length < MyBots.MAX ? '<button class="bot-card new" data-a="newbot"><span class="plus">+</span><div class="nm">New bot</div><div class="rt">100 – 3500</div></button>' : '') + '</div>';
+    }
+    /* make or change one of your bots: name, rating, and a face or a photo */
+    function botEditor(id) {
+      const old = id && MyBots.saved().find(x => x.id === id);
+      const st = old ? Object.assign({}, old) : { name: '', elo: 1200, img: null, face: UI.faceParams(Math.floor(Math.random() * 1e9)) };
+      let extra = [1, 2, 3, 4, 5, 6, 7, 8].map(() => UI.faceParams(Math.floor(Math.random() * 1e9)));
+      const pic = () => st.img ? '<img src="' + st.img + '" alt="">' : UI.face(st.face);
+      const same = f => !st.img && JSON.stringify(f) === JSON.stringify(st.face);
+      const grid = () => '<button class="up' + (st.img ? ' on' : '') + '" data-up>' + (st.img ? '<img src="' + st.img + '" alt="">' : '📷<span>Upload</span>') + '</button>' +
+        BOTS.map(b => b.face).concat(extra).map((f, i) => '<button data-f="' + i + '" class="' + (same(f) ? 'on' : '') + '"><span class="av">' + UI.face(f) + '</span></button>').join('') + '<button class="up" data-more>↻<span>More</span></button>';
+      const s = sheet('<h3>' + (old ? 'Edit your bot' : 'Make a bot') + '</h3>' +
+        '<div class="row gap" style="margin-bottom:12px"><span class="av" data-prev style="width:64px;height:64px">' + pic() + '</span><input class="field" id="bn" maxlength="16" placeholder="Its name" value="' + esc(st.name) + '"></div>' +
+        '<div class="tc-label" style="margin-top:0">Rating <b data-elo style="color:var(--text);margin-left:4px">' + st.elo + '</b></div><input type="range" class="range" id="be" min="' + BotPlay.MIN_ELO + '" max="' + BotPlay.MAX_ELO + '" step="25" value="' + st.elo + '">' +
+        '<p class="small muted" data-desc style="margin:4px 2px 0;min-height:38px">' + esc(MyBots.describeElo(st.elo)) + '</p>' +
+        '<div class="tc-label">Picture</div><div class="icon-grid">' + grid() + '</div>' +
+        '<div class="row gap" style="margin-top:14px">' + (old ? '<button class="btn ghost" data-del>Delete</button>' : '') + '<button class="btn primary grow" data-save>' + (old ? 'Save' : 'Make bot') + '</button></div>');
+      const show = () => { $('[data-prev]', s).innerHTML = pic(); $('.icon-grid', s).innerHTML = grid(); };
+      $('#be', s).addEventListener('input', e => { st.elo = +e.target.value; $('[data-elo]', s).textContent = st.elo; $('[data-desc]', s).textContent = MyBots.describeElo(st.elo); });
+      s.addEventListener('click', async e => {
+        const f = e.target.closest('[data-f]'); if (f) { st.face = BOTS.map(b => b.face).concat(extra)[+f.dataset.f]; st.img = null; return show(); }
+        if (e.target.closest('[data-more]')) { extra = extra.map(() => UI.faceParams(Math.floor(Math.random() * 1e9))); return show(); }
+        if (e.target.closest('[data-up]')) { const img = await UI.pickImage(); if (img) { st.img = img; show(); } return; }
+        if (e.target.closest('[data-del]')) {
+          if (!(await confirmBox('Delete ' + (old.name || 'this bot') + '?', 'It can’t be brought back.', 'Delete'))) return;
+          MyBots.remove(old.id); if (Store.data.current && Store.data.current.bot === old.id) Store.data.current = null;
+          if (sel.id === old.id) sel = BOTS[1];
+          s.close(); return draw();
+        }
+        if (e.target.closest('[data-save]')) {
+          st.name = $('#bn', s).value.trim() || 'My bot';
+          const b = MyBots.save(st); if (!b) return toast('You can have up to ' + MyBots.MAX + ' bots');
+          sel = findBot(b.id); s.close(); toast(old ? 'Saved' : b.name + ' is ready'); draw();
+        }
+      });
+    }
     /* Coach Mira: off or one of her three levels (Extreme opens up after a few games) */
     function coachPick() {
       const ex = Coach.extremeOpen(), L = Coach.LEVELS[coach];
@@ -238,7 +280,9 @@
         '<p class="small muted" style="margin:8px 2px 0">' + (L ? esc(L.blurb) : 'No coach – just you and the bot.') + (ex.open ? '' : ' <span class="faint">Extreme unlocks after ' + Coach.UNLOCK + ' finished games (' + ex.left + ' to go).</span>') + '</p>';
     }
     el.addEventListener('click', e => {
-      const b = e.target.closest('[data-bot]'); if (b) { sel = BOTS.find(x => x.id === b.dataset.bot); return draw(); }
+      const b = e.target.closest('[data-bot]'); if (b) { sel = findBot(b.dataset.bot) || sel; return draw(); }
+      if (e.target.closest('[data-a="newbot"]')) return botEditor(null);
+      if (e.target.closest('[data-a="editbot"]')) return botEditor(sel.id);
       const c = e.target.closest('[data-color]'); if (c) { color = c.dataset.color; return draw(); }
       const lv = e.target.closest('[data-coachlv]');
       if (lv) { if (lv.dataset.coachlv === 'extreme' && !Coach.extremeOpen().open) return toast('Finish ' + Coach.extremeOpen().left + ' more games to unlock Extreme coaching'); coach = lv.dataset.coachlv; return draw(); }
@@ -273,13 +317,14 @@
   /* ---------- watch ---------- */
   function watch(el) {
     let list = null, bw = BOTS[4], bb = BOTS[7];
+    const allBots = () => BOTS.concat(MyBots.list());
     const draw = () => {
       el.innerHTML = '<div class="page"><div class="row"><h1 class="grow">Watch</h1><button class="iconbtn" data-a="refresh" aria-label="Refresh">' + icon('undo') + '</button></div>' +
         '<div class="section-title">Live games</div><div class="live"></div>' +
-        '<div class="section-title">Bot battle</div><div class="card"><p class="small muted">Pick two bots and watch them play.</p><div class="row gap"><select class="field" id="bw">' + BOTS.map(b => '<option value="' + b.id + '"' + (b === bw ? ' selected' : '') + '>' + esc(b.name) + ' (' + b.rating + ')</option>').join('') + '</select><b class="muted">vs</b><select class="field" id="bb">' +
-        BOTS.map(b => '<option value="' + b.id + '"' + (b === bb ? ' selected' : '') + '>' + esc(b.name) + ' (' + b.rating + ')</option>').join('') + '</select></div><button class="btn primary block" style="margin-top:12px" data-a="battle">Watch</button></div></div>';
-      $('#bw', el).onchange = e => { bw = BOTS.find(b => b.id === e.target.value); };
-      $('#bb', el).onchange = e => { bb = BOTS.find(b => b.id === e.target.value); };
+        '<div class="section-title">Bot battle</div><div class="card"><p class="small muted">Pick two bots and watch them play.</p><div class="row gap"><select class="field" id="bw">' + allBots().map(b => '<option value="' + b.id + '"' + (b.id === bw.id ? ' selected' : '') + '>' + esc(b.name) + ' (' + b.rating + ')</option>').join('') + '</select><b class="muted">vs</b><select class="field" id="bb">' +
+        allBots().map(b => '<option value="' + b.id + '"' + (b.id === bb.id ? ' selected' : '') + '>' + esc(b.name) + ' (' + b.rating + ')</option>').join('') + '</select></div><button class="btn primary block" style="margin-top:12px" data-a="battle">Watch</button></div></div>';
+      $('#bw', el).onchange = e => { bw = findBot(e.target.value) || bw; };
+      $('#bb', el).onchange = e => { bb = findBot(e.target.value) || bb; };
       drawLive();
     };
     const drawLive = () => {
@@ -305,12 +350,26 @@
     return () => { clearInterval(iv); offs.forEach(f => f()); };
   }
 
+  /* your picture: a photo from your phone (it stays on this device – other players see your drawn face), or a new drawn face */
+  function pictureSheet() {
+    const p = Store.data.profile;
+    const s = sheet('<h3>Your picture</h3><div class="row gap" style="margin-bottom:8px">' + UI.avatarHtml(p, 64) + '<p class="small muted grow" style="margin:0">A photo stays on this phone. In online games other players see your drawn face.</p></div>' +
+      '<button class="menu-item" data-p="photo">📷 Upload a photo</button><button class="menu-item" data-p="face">🎲 Draw me a new face</button>' + (p.img ? '<button class="menu-item" data-p="drop">✕ Remove the photo</button>' : ''));
+    s.addEventListener('click', async e => {
+      const b = e.target.closest('[data-p]'); if (!b) return; const k = b.dataset.p;
+      if (k === 'photo') { const img = await UI.pickImage(); if (!img) return; p.img = img; }
+      if (k === 'face') { p.face = Math.floor(Math.random() * 1e9); p.img = null; Net.reconnect(); }
+      if (k === 'drop') p.img = null;
+      Store.save(); s.close(); App.go('profile', {}, true);
+    });
+  }
+
   /* ---------- profile, games, leaderboard ---------- */
   function profile(el) {
     const p = Store.data.profile, R = Store.data.online.ratings || {}, P = Store.data.puzzles, G = Store.data.games;
     const mine = G.filter(g => g.me && g.reason !== 'aborted'), w = mine.filter(g => g.winner === g.me).length, l = mine.filter(g => g.winner && g.winner !== g.me).length, d = mine.length - w - l;
     const card = (name, r, sub) => '<div class="stat"><span>' + name + '</span><b>' + r + '</b><span>' + sub + '</span></div>';
-    el.innerHTML = '<div class="page"><div class="row gap"><button data-a="face" style="border:0;background:none;padding:0" aria-label="New face">' + UI.avatarHtml(p, 72) + '</button><div class="grow"><h1 style="margin:0" class="ellipsis">' + esc(p.name || 'Player') + '</h1><div class="small muted">Playing since ' + new Date(p.created).toLocaleDateString() + '</div>' +
+    el.innerHTML = '<div class="page"><div class="row gap"><button data-a="face" style="border:0;background:none;padding:0;position:relative" aria-label="Change your picture">' + UI.avatarHtml(p, 72) + '<span class="av-edit">✎</span></button><div class="grow"><h1 style="margin:0" class="ellipsis">' + esc(p.name || 'Player') + '</h1><div class="small muted">Playing since ' + new Date(p.created).toLocaleDateString() + '</div>' +
       '<button class="btn sm" style="margin-top:6px" data-a="name">Edit name</button></div><button class="iconbtn" data-go="settings" aria-label="Settings">' + icon('gear') + '</button></div>' +
       '<div class="section-title">Ratings</div><div class="stat-grid">' + card('Bullet', rr(R.bullet), (R.bullet ? R.bullet.games : 0) + ' games') + card('Blitz', rr(R.blitz), (R.blitz ? R.blitz.games : 0) + ' games') + card('Rapid', rr(R.rapid), (R.rapid ? R.rapid.games : 0) + ' games') +
       card('Bots', botR(), Store.data.botRating.games + ' rated game' + (Store.data.botRating.games === 1 ? '' : 's')) + card('Puzzles', Math.round(P.r), P.solved + ' solved') + card('Rush', Store.data.rush.best, 'best score') +
@@ -338,7 +397,7 @@
       const g = e.target.closest('[data-go]'); if (g) return App.go(g.dataset.go);
       const gi = e.target.closest('[data-game]'); if (gi) return gameSheet(gi.dataset.game);
       const a = e.target.closest('[data-a]'); if (!a) return;
-      if (a.dataset.a === 'face') { p.face = Math.floor(Math.random() * 1e9); Store.save(); Net.reconnect(); App.go('profile', {}, true); }
+      if (a.dataset.a === 'face') return pictureSheet();
       if (a.dataset.a === 'name') nameSheet();
       if (a.dataset.a === 'install') install();
     });

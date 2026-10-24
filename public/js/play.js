@@ -392,8 +392,10 @@
       if (st.reason === 'aborted' || this.game.history.length < 2) return;
       if (this.assisted || this.game.startFen !== Chess.START_FEN) { this.botRated = { skipped: this.game.startFen !== Chess.START_FEN ? 'set-up position' : 'help' }; return; }
       const R = Store.data.botRating, old = Math.round(R.r), score = st.winner === this.me ? 1 : st.winner ? 0 : 0.5;
-      // Titan's rating is an estimate, so it counts as less certain than the measured bots
-      const nr = Rating.update(R, { r: this.bot.rating, rd: this.bot.id === 'titan' ? 150 : 60, at: Date.now() }, score);
+      // Titan's rating is an estimate, so it counts as less certain than the measured bots; your own bots are in between,
+      // except above Titan, where nothing has been measured
+      const rd = this.bot.mine ? (this.bot.rating > 2800 ? 200 : 90) : this.bot.id === 'titan' ? 150 : 60;
+      const nr = Rating.update(R, { r: this.bot.rating, rd, at: Date.now() }, score);
       Store.data.botRating = nr; Store.logRating('bots', nr.r);
       this.botRated = { old, now: Math.round(nr.r) };
     }
@@ -567,7 +569,7 @@
   }
 
   /* ---------- starting games ---------- */
-  const me = () => ({ name: Store.data.profile.name || 'You', face: Store.data.profile.face });
+  const me = () => ({ name: Store.data.profile.name || 'You', face: Store.data.profile.face, img: Store.data.profile.img || undefined });
   const Play = {
     current: null,   // the game on (or behind) the game screen
     player: null,    // our own online game, if any (kept while watching others)
@@ -594,7 +596,7 @@
     },
     resumeBot() {
       const c = Store.data.current; if (!c) return;
-      const bot = BOTS.find(b => b.id === c.bot); if (!bot) { Store.data.current = null; return; }
+      const bot = findBot(c.bot); if (!bot) { Store.data.current = null; return; }
       this.startBot(bot, c.me, { startFen: c.startFen, moves: c.moves, assisted: c.assisted, coach: c.coach, coached: c.coached });
     },
     startLocal(o) {
@@ -608,6 +610,7 @@
       const ctl = new GameCtl({ mode: s.you ? 'online' : 'watch', me: s.you || 'w', id: s.id, players: { w: s.white, b: s.black }, moves: s.moves, tc, clock: s.clock, running: s.running, rated: s.rated, cat: s.cat, drawOffer: s.drawOffer, online: s.online,
         ratings: s.ratings, takebacks: s.takebacks, takebacksLeft: s.takebacksLeft });
       if (!s.you) ctl.me = null;
+      else if (Store.data.profile.img) ctl.players[s.you] = Object.assign({}, ctl.players[s.you], { img: Store.data.profile.img });   // your photo, on your screen only
       if (s.firstMoveLeft != null) ctl.firstDeadline = performance.now() + s.firstMoveLeft;
       if (s.over) { ctl.over = { over: true, winner: s.over.winner, reason: s.over.reason, result: s.over.result }; ctl.ratingChange = s.over.ratings; ctl.ended = true; }
       return ctl;

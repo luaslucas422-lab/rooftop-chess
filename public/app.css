@@ -93,7 +93,8 @@ textarea.field { min-height: 110px; font: 13px/1.4 ui-monospace, SFMono-Regular,
 .tc-grid button.on { border-color: var(--accent); background: rgba(255, 159, 67, .12); color: var(--accent); }
 .tc-label { font-size: 13px; font-weight: 800; color: var(--muted); margin: 14px 2px 8px; display: flex; align-items: center; gap: 6px; }
 .av { display: inline-block; border-radius: 26%; overflow: hidden; flex-shrink: 0; background: var(--card2); }
-.av svg { width: 100%; height: 100%; display: block; }
+.av svg, .av img { width: 100%; height: 100%; display: block; }
+.av img { object-fit: cover; }
 .switch { position: relative; width: 48px; height: 28px; flex-shrink: 0; }
 .switch input { opacity: 0; width: 0; height: 0; position: absolute; }
 .switch span { position: absolute; inset: 0; background: var(--line); border-radius: 99px; transition: .2s; }
@@ -333,3 +334,17 @@ body.bigclock .clock { font-size: 26px; min-width: 112px; }
   .gv-side .coach-live .coach-name { display: block; }
   .gv-side .coach-live .coach-msg { max-height: none; }
 }
+
+/* ---------- your own bots ---------- */
+.bot-card.new { border: 2px dashed var(--line); background: transparent; }
+.bot-card .plus { width: 52px; height: 52px; margin: 0 auto; display: grid; place-items: center; border-radius: 26%; background: var(--card2); font-size: 30px; font-weight: 300; color: var(--accent); }
+.bot-card .nm.ellipsis { display: block; }
+.range { width: 100%; accent-color: var(--accent); height: 28px; }
+.icon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(56px, 1fr)); gap: 6px; max-height: 236px; overflow-y: auto; padding: 2px; }
+.icon-grid button { border: 2px solid transparent; border-radius: 16px; padding: 2px; background: none; aspect-ratio: 1; }
+.icon-grid button.on { border-color: var(--accent); }
+.icon-grid .av { width: 100%; height: 100%; }
+.icon-grid .up { background: var(--card2); display: flex; flex-direction: column; align-items: center; justify-content: center; font-size: 18px; overflow: hidden; }
+.icon-grid .up span { font-size: 10.5px; font-weight: 700; color: var(--muted); }
+.icon-grid .up img { width: 100%; height: 100%; object-fit: cover; border-radius: 12px; }
+.av-edit { position: absolute; right: -4px; bottom: -4px; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: var(--accentText); display: grid; place-items: center; font-size: 13px; font-weight: 800; border: 2px solid var(--bg); }

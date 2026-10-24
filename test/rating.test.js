@@ -30,3 +30,17 @@ assert(R.gameRating({ acc: 85, opp: 2000, score: 0.5 }) >= R.gameRating({ acc: 8
 assert.strictEqual(Math.round(R.moveAccuracy(0)), 100); assert(R.moveAccuracy(30) < 30);
 near(R.accuracy([100, 100, 100]), 100, 0.01, 'perfect game'); assert(R.accuracy([100, 100, 10]) < 70, 'a blunder pulls it down hard');
 console.log('rating ok');
+
+// a bot of any rating (your own bots): measured bots at their own ratings, a mix in between, more blunders below Pip,
+// more thinking time above Titan
+const B = require('../public/js/botplay.js');
+assert.deepStrictEqual(Object.assign({}, B.forElo(1050), { elo: undefined }), Object.assign({}, B.LEVELS.ravi, { elo: undefined }), 'exactly Ravi at 1050');
+const mid = B.forElo(1150); assert(mid.mix && mid.mix.lo === B.LEVELS.ravi && mid.mix.hi === B.LEVELS.selma && Math.abs(mid.mix.t - 0.5) < 1e-9, 'halfway between Ravi and Selma');
+assert(B.forElo(100).blunder > B.forElo(200).blunder && B.forElo(200).blunder > B.LEVELS.pip.blunder - 1e-9, 'below Pip: more blunders the lower it goes');
+assert(B.forElo(3500).time > B.forElo(3000).time && B.forElo(3000).time > B.LEVELS.titan.time, 'above Titan: more time the higher it goes');
+assert.strictEqual(B.forElo(9999).elo, 3500); assert.strictEqual(B.forElo(-5).elo, 100);
+for (let e = 100; e < 3500; e += 50) { const a = B.forElo(e), b = B.forElo(e + 50); assert(a && b, 'a level for every rating'); }
+// a mixed bot really moves: it plays like one of its two bots each time
+{ const C = require('../public/js/chess.js'), E = require('../public/js/engine.js'), S = new E.Searcher(16), pos = new C.Position();
+  for (let i = 0; i < 5; i++) assert(B.choose(S, pos, [], [], B.forElo(1150), Math.random), 'a move'); }
+console.log('bot ratings ok');
