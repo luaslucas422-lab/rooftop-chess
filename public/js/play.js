@@ -63,7 +63,7 @@
       this.premove = null; this.hintMove = null; this.assisted = false;
       this.coach = null; this.coachGate = null; this.coached = false;   // Coach Mira (bot games)
       // online games set up with move ratings and/or takebacks (both players chose them when they queued)
-      this.takebacks = !!o.takebacks; this.takebackOffer = o.takebackOffer || null;
+      this.takebacks = o.takebacks || 0; this.tbLeft = o.takebacksLeft || { w: 0, b: 0 };   // takebacks each: 3, 10 or -1 (any number); left for each side
       this.rater = o.ratings ? new Coach.Rater(this) : null;
       this.offs = [];
       const st = this.game.status(); if (st.over) this.over = st;
@@ -227,8 +227,8 @@
       } else if (this.mode === 'online') {
         if (n < 2) b('abort', 'x', 'Abort');
         else b('draw', 'half', this.drawOffer && this.drawOffer !== this.me ? 'Accept draw' : this.drawOffer === this.me ? 'Offered' : 'Draw', this.drawOffer === this.me ? 'disabled' : this.drawOffer ? 'class="hot"' : '');
-        if (this.takebacks) { const theirs = this.takebackOffer && this.takebackOffer !== this.me;
-          b('takeback', 'undo', theirs ? 'Allow' : this.takebackOffer === this.me ? 'Asked' : 'Takeback', theirs ? 'class="hot"' : this.takebackOffer === this.me || !this.game.history.some(h => h.color === this.me) ? 'disabled' : ''); }
+        if (this.takebacks) { const left = this.tbLeft[this.me];
+          b('takeback', 'undo', 'Takeback' + (left < 0 ? '' : '<i class="count">' + left + '</i>'), left === 0 || !this.game.history.some(h => h.color === this.me) ? 'disabled' : ''); }
         b('resign', 'flag', 'Resign', n < 2 ? 'disabled' : '');
         b('chat', 'chat', 'Chat');
       } else if (this.mode === 'watch' || this.mode === 'battle') b('flip', 'flip', 'Flip');
@@ -241,7 +241,6 @@
       if (this.over) s = '<span>' + esc(this.resultTitle()) + ' <span class="muted">· ' + esc(this.reasonText()) + '</span></span>';
       else if (this.mode === 'online' && Net.state !== 'online') s = '<span class="warn">Reconnecting… your clock keeps running</span>';
       else if (this.mode === 'online' && this.drawOffer && this.drawOffer !== this.me) s = '<span>Your opponent offers a draw</span><button class="btn sm primary" data-act="draw">Accept</button><button class="btn sm" data-act="decline">No</button>';
-      else if (this.mode === 'online' && this.takebackOffer && this.takebackOffer !== this.me) s = '<span>Your opponent wants to take back a move</span><button class="btn sm primary" data-act="takeback">Allow</button><button class="btn sm" data-act="declinetb">No</button>';
       else if (this.mode === 'online' && this.online[otherC(this.me)] === false) s = '<span class="warn">Your opponent disconnected – they have 90 seconds to come back</span>';
       else if (this.mode === 'online' && this.game.history.length < 2 && this.firstDeadline) { const left = Math.max(0, Math.ceil((this.firstDeadline - performance.now()) / 1000)); s = '<span class="muted">' + (this.game.turn === this.me ? 'Your move' : 'Waiting for their first move') + (left < 25 ? ' · ' + left + 's' : '') + '</span>'; }
       else if (this.mode === 'local') s = '<span class="muted">' + (this.game.turn === 'w' ? 'White' : 'Black') + ' to move</span>';
@@ -335,7 +334,7 @@
     /* online: a move from the server (ours echoed back, or theirs) */
     serverMove(m) {
       const n = this.game.history.length;
-      this.clock = m.clock.slice(); this.clockAt = performance.now(); this.running = m.running; this.drawOffer = m.drawOffer || null; this.takebackOffer = null;
+      this.clock = m.clock.slice(); this.clockAt = performance.now(); this.running = m.running; this.drawOffer = m.drawOffer || null;
       if (m.ply === 1) this.firstDeadline = performance.now() + 30000;   // Black now has 30s for their first move
       if (m.ply === n) { this.tick(true); this.drawActions(); this.drawStatus(); return; }   // our own move, confirmed
       if (m.ply !== n + 1) { Net.send({ t: 'sync' }); return; }
@@ -355,7 +354,7 @@
       // full state from the server: rebuild if our moves differ
       const mine = this.ucis.join(' '), theirs = s.moves.join(' ');
       if (mine !== theirs) { this.game = new Chess.Game(); for (const u of s.moves) this.game.move(u); this.view = null; this.premove = null; if (this.board) this.board.clearPremove(); }
-      this.clock = s.clock.slice(); this.clockAt = performance.now(); this.running = s.running; this.drawOffer = s.drawOffer; this.takebackOffer = s.takebackOffer || null; this.online = s.online || this.online;
+      this.clock = s.clock.slice(); this.clockAt = performance.now(); this.running = s.running; this.drawOffer = s.drawOffer; this.tbLeft = s.takebacksLeft || this.tbLeft; this.online = s.online || this.online;
       if (s.firstMoveLeft != null) this.firstDeadline = performance.now() + s.firstMoveLeft;
       if (s.over && !this.over) this.serverEnd(Object.assign({ id: s.id }, s.over));
       this.draw(false);
@@ -432,10 +431,10 @@
           return;
         }
         case 'takeback': {
-          if (this.mode === 'online') {   // ask (or allow theirs); the server takes the moves back when both agree
+          if (this.mode === 'online') {   // no asking: the server takes your move back and sends the game as it now stands
             if (!this.takebacks || this.over) return;
-            if (this.takebackOffer && this.takebackOffer !== this.me) { Net.send({ t: 'takeback', id: this.id, op: 'accept' }); return; }
-            if (Net.send({ t: 'takeback', id: this.id, op: 'offer' })) { this.takebackOffer = this.me; this.drawActions(); toast('Takeback requested'); }
+            if (this.tbLeft[this.me] === 0) return toast('You have no takebacks left');
+            Net.send({ t: 'takeback', id: this.id });
             return;
           }
           if (!n) return;
@@ -464,7 +463,6 @@
           return;
         }
         case 'decline': Net.send({ t: 'draw', id: this.id, op: 'decline' }); this.drawOffer = null; return this.draw(false);
-        case 'declinetb': Net.send({ t: 'takeback', id: this.id, op: 'decline' }); this.takebackOffer = null; return this.draw(false);
         case 'chat': {
           const s = sheet('<h3>Say something</h3><div class="row wrap gap4">' + Net.chat.map((c, i) => '<button class="btn sm" data-i="' + i + '">' + esc(c) + '</button>').join('') + '</div>');
           s.addEventListener('click', e => { const b = e.target.closest('[data-i]'); if (b) { Net.send({ t: 'chat', id: this.id, i: +b.dataset.i }); s.close(); } });
@@ -593,7 +591,7 @@
       engine('rater').stop();   // a new game on screen: its own move ratings start from scratch
       const tc = (() => { const [b, i] = s.tc.split('+').map(Number); return { base: b * 60000, inc: i * 1000 }; })();
       const ctl = new GameCtl({ mode: s.you ? 'online' : 'watch', me: s.you || 'w', id: s.id, players: { w: s.white, b: s.black }, moves: s.moves, tc, clock: s.clock, running: s.running, rated: s.rated, cat: s.cat, drawOffer: s.drawOffer, online: s.online,
-        ratings: s.ratings, takebacks: s.takebacks, takebackOffer: s.takebackOffer });
+        ratings: s.ratings, takebacks: s.takebacks, takebacksLeft: s.takebacksLeft });
       if (!s.you) ctl.me = null;
       if (s.firstMoveLeft != null) ctl.firstDeadline = performance.now() + s.firstMoveLeft;
       if (s.over) { ctl.over = { over: true, winner: s.over.winner, reason: s.over.reason, result: s.over.result }; ctl.ratingChange = s.over.ratings; ctl.ended = true; }
@@ -630,12 +628,11 @@
   Net.on('offer', m => {
     const c = forGame(m.id); if (!c) return;
     if (m.kind === 'draw') { c.drawOffer = m.from; c.draw(false); if (m.from !== c.me && c.me) Sound.play('notify'); }
-    if (m.kind === 'takeback') { c.takebackOffer = m.from; c.draw(false); if (m.from !== c.me && c.me) Sound.play('notify'); }
     if (m.kind === 'rematch' && m.from !== c.me) { c.rematchOffer = 'them'; c.drawActions(); Sound.play('notify'); toast('Your opponent wants a rematch'); }
   });
-  Net.on('declined', m => { const c = forGame(m.id); if (!c) return; if (m.kind === 'draw') { c.drawOffer = null; c.draw(false); if (m.from !== c.me) toast('Draw declined'); } if (m.kind === 'rematch') { c.rematchOffer = null; c.drawActions(); toast('Rematch declined'); }
-    if (m.kind === 'takeback') { c.takebackOffer = null; c.draw(false); if (m.from !== c.me) toast('Takeback declined'); } });
-  Net.on('tookBack', m => { const c = forGame(m.id); if (c) toast(m.from === c.me ? 'Your move was taken back' : 'Their move was taken back'); });
+  Net.on('declined', m => { const c = forGame(m.id); if (!c) return; if (m.kind === 'draw') { c.drawOffer = null; c.draw(false); if (m.from !== c.me) toast('Draw declined'); } if (m.kind === 'rematch') { c.rematchOffer = null; c.drawActions(); toast('Rematch declined'); } });
+  Net.on('tookBack', m => { const c = forGame(m.id); if (!c) return;
+    toast(m.from === c.me ? 'Move taken back' + (m.left >= 0 ? ' · ' + m.left + ' left' : '') : (c.me ? 'Your opponent' : m.from === 'w' ? 'White' : 'Black') + ' took back a move'); });
   Net.on('presence', m => { const c = forGame(m.id); if (!c) return; c.online[m.color] = m.online; c.draw(false); });
   Net.on('chat', m => { const c = forGame(m.id); if (c) { c.showChat(m.from, Net.chat[m.i] || ''); if (m.from !== c.me) Sound.play('notify'); } });
   Net.on('error', m => toast(m.msg));

@@ -122,9 +122,12 @@
   function online(el, params) {
     let tc = params.tc || Store.data.lastTc || '10+0', seeking = false, t0 = 0, iv = null;
     // what you're looking for: you're only paired with someone whose choices fit (colors that don't clash, the same extras)
-    const opt = Object.assign({ color: 'r', ratings: false, takebacks: false }, Store.data.lastSeek);
-    const casual = () => opt.ratings || opt.takebacks;
-    const optText = () => [opt.color === 'w' ? 'as White' : opt.color === 'b' ? 'as Black' : '', opt.ratings ? 'move ratings' : '', opt.takebacks ? 'takebacks' : '', casual() ? 'casual' : ''].filter(Boolean).join(' · ');
+    const opt = Object.assign({ color: 'r', ratings: false, takebacks: 0 }, Store.data.lastSeek);
+    const TB = [[0, 'Off'], [3, '3 each'], [10, '10 each'], [-1, 'Unlimited']];   // takebacks each player gets (-1: any number)
+    if (!TB.some(([n]) => n === opt.takebacks)) opt.takebacks = 0;
+    const casual = () => !!(opt.ratings || opt.takebacks);
+    const tbText = n => n < 0 ? 'unlimited takebacks' : n + ' takebacks each';
+    const optText = () => [opt.color === 'w' ? 'as White' : opt.color === 'b' ? 'as Black' : '', opt.ratings ? 'move ratings' : '', opt.takebacks ? tbText(opt.takebacks) : '', casual() ? 'casual' : ''].filter(Boolean).join(' · ');
     const sw = (id, on, name, text) => '<label class="row gap" style="margin:12px 2px"><span class="grow"><b>' + name + '</b><span class="small muted" style="display:block">' + text + '</span></span><span class="switch"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '><span></span></span></label>';
     const draw = () => {
       const R = Store.data.online.ratings || {}, cat = catOf(tc);
@@ -134,7 +137,8 @@
           tcPicker(tc) +
           '<div class="tc-label">I play</div><div class="seg">' + [['w', 'White'], ['r', 'Random'], ['b', 'Black']].map(([k, n]) => '<button data-color="' + k + '" class="' + (opt.color === k ? 'on' : '') + '">' + n + '</button>').join('') + '</div>' +
           sw('opt-ratings', opt.ratings, 'Move ratings', 'Show how good every move is (best, mistake, blunder…) and both players’ accuracy during the game') +
-          sw('opt-takebacks', opt.takebacks, 'Takebacks', 'Either player can ask to take back a move; the other one says yes or no') +
+          '<div class="tc-label">Takebacks</div><div class="seg">' + TB.map(([n, t]) => '<button data-tb="' + n + '" class="' + (opt.takebacks === n ? 'on' : '') + '">' + t + '</button>').join('') + '</div>' +
+          '<p class="small muted" style="margin:6px 2px 12px">' + (opt.takebacks ? 'Take back your last move whenever you like – no need to ask. ' + (opt.takebacks < 0 ? 'As many times as you want.' : 'Each player gets ' + opt.takebacks + '.') : 'No taking back moves.') + '</p>' +
           '<p class="small muted" style="margin:0 2px">You’re only matched with players who chose the same. ' + (casual() ? '<b>These games are casual – your rating doesn’t change.</b>' : 'Picking a color can take longer to find a game.') + '</p>' +
           '<div class="row gap" style="margin:16px 2px 12px"><span class="muted small grow">Your ' + cat + ' rating</span><b>' + (casual() ? 'casual game' : rr(R[cat])) + '</b></div><button class="btn primary big" data-a="play">Play ' + tcText(tc) + '</button>' +
           '<p class="small muted center net-line" style="margin-top:12px"></p>') + '</div>';
@@ -153,10 +157,11 @@
     };
     iv = setInterval(tick, 500);
     const offs = [Net.on('state', netLine), Net.on('seeking', () => { seeking = true; }), Net.on('unseeked', () => { seeking = false; draw(); })];
-    el.addEventListener('change', e => { if (e.target.id === 'opt-ratings') opt.ratings = e.target.checked; if (e.target.id === 'opt-takebacks') opt.takebacks = e.target.checked; if (/^opt-/.test(e.target.id)) draw(); });
+    el.addEventListener('change', e => { if (e.target.id === 'opt-ratings') opt.ratings = e.target.checked; if (/^opt-/.test(e.target.id)) draw(); });
     el.addEventListener('click', e => {
       const b = e.target.closest('[data-tc]'); if (b) { tc = b.dataset.tc; return draw(); }
       const col = e.target.closest('[data-color]'); if (col && !seeking) { opt.color = col.dataset.color; return draw(); }
+      const tb = e.target.closest('[data-tb]'); if (tb && !seeking) { opt.takebacks = +tb.dataset.tb; return draw(); }
       const g = e.target.closest('[data-go]'); if (g) { e.preventDefault(); return App.go(g.dataset.go); }
       const a = e.target.closest('[data-a]'); if (!a) return;
       if (a.dataset.a === 'play') start();

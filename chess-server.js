@@ -117,6 +117,7 @@ function createChessServer(opts) {
 
   const people = new Map();     // id -> { id, ws, profile, game, seek, challenge, watching }
   const seeks = new Map();      // tc -> [{ id, since, color: w | b | r, ratings, takebacks }]
+  const TAKEBACKS = [0, 3, 10, -1];   // takebacks each player gets in a game: none, 3, 10, or (-1) as many as they like
   const challenges = new Map(); // code -> { code, from, tc, color, rated, at }
   const games = new Map();      // id -> game
   const finished = new Map();   // id -> recently finished game (for rematches)
@@ -139,7 +140,7 @@ function createChessServer(opts) {
   function gameState(g, forId) {
     return { t: 'game', id: g.id, white: g.players.w, black: g.players.b, tc: g.tc.label, cat: g.cat, rated: g.rated, moves: g.chess.history.map(h => h.uci),
       clock: clocksNow(g), turn: g.chess.turn, running: g.chess.history.length >= 2 && !g.over, you: g.ids.w === forId ? 'w' : g.ids.b === forId ? 'b' : null,
-      drawOffer: g.drawOffer, ratings: !!g.ratings, takebacks: !!g.takebacks, takebackOffer: g.takebackOffer || null, over: g.over ? { result: g.result, reason: g.reason, winner: g.winner, ratings: g.ratingChange || null } : null,
+      drawOffer: g.drawOffer, ratings: !!g.ratings, takebacks: g.takebacks, takebacksLeft: g.tbLeft, over: g.over ? { result: g.result, reason: g.reason, winner: g.winner, ratings: g.ratingChange || null } : null,
       firstMoveLeft: g.chess.history.length < 2 ? Math.max(0, FIRST_MOVE_MS - (now() - g.turnStart)) : null,
       online: { w: isOnline(g.ids.w), b: isOnline(g.ids.b) }, spectators: g.watchers.size };
   }
@@ -151,14 +152,16 @@ function createChessServer(opts) {
   }
   function broadcast(g, o) { send((people.get(g.ids.w) || {}).ws, o); send((people.get(g.ids.b) || {}).ws, o); for (const ws of g.watchers) send(ws, o); }
 
-  /* opts: { ratings (show move ratings during the game), takebacks (either side may ask to take a move back) } */
+  /* opts: { ratings (show move ratings during the game), takebacks (how many moves each side may take back: 0, 3, 10, or -1 for any number) } */
   async function startGame(idW, idB, tcLabel, rated, from, opts) {
     const pw = people.get(idW), pb = people.get(idB);
     if (!pw || !pb) return;
     const tc = tcParse(tcLabel), cat = Rating.category(tc.base / 1000, tc.inc / 1000);
+    const tb = (opts && opts.takebacks) || 0;
     const g = { id: 'g' + (gameSeq++).toString(36) + crypto.randomBytes(3).toString('hex'), ids: { w: idW, b: idB }, tc, cat, rated: rated !== false,
       players: { w: publicPlayer(pw.profile, cat), b: publicPlayer(pb.profile, cat) }, chess: new Chess.Game(), clock: [tc.base, tc.base],
-      turnStart: now(), timer: null, drawOffer: null, takebackOffer: null, ratings: !!(opts && opts.ratings), takebacks: !!(opts && opts.takebacks), rematch: null, watchers: new Set(), over: false, startedAt: now(), from: from || 'seek', gone: { w: 0, b: 0 } };
+      turnStart: now(), timer: null, drawOffer: null, ratings: !!(opts && opts.ratings), takebacks: (opts && opts.takebacks) || 0, rematch: null, watchers: new Set(), over: false, startedAt: now(), from: from || 'seek', gone: { w: 0, b: 0 } };
+    g.tbLeft = { w: tb, b: tb };
     games.set(g.id, g);
     for (const p of [pw, pb]) { p.game = g.id; unseek(p); cancelChallenge(p); }
     send(pw.ws, gameState(g, idW)); send(pb.ws, gameState(g, idB));
@@ -238,14 +241,14 @@ function createChessServer(opts) {
     if (n >= 2) g.clock[ci] += g.tc.inc;
     g.turnStart = t;
     if (g.drawOffer && g.drawOffer !== color) g.drawOffer = null;   // moving declines their offer
-    g.takebackOffer = null;                                          // and any takeback request is out of date
     broadcast(g, { t: 'move', id: g.id, uci: rec.uci, san: rec.san, ply: g.chess.history.length, clock: g.clock.slice(), running: g.chess.history.length >= 2, drawOffer: g.drawOffer });
     const st = g.chess.status();
     if (st.over) return finish(g, st.winner, st.reason);
     arm(g);
   }
 
-  /* take back `who`'s last move (and the reply to it, if there was one); the side to move is charged the time it used */
+  /* take back `who`'s last move (and the reply to it, if there was one) – no asking, it's one of their takebacks.
+     The side to move is charged the time it used. */
   function takeBack(g, who) {
     const h = g.chess.history; let k = h.length && h[h.length - 1].color !== who ? 1 : 0;
     if (h.length - k < 1 || h[h.length - 1 - k].color !== who) return;
@@ -253,10 +256,11 @@ function createChessServer(opts) {
     const t = now();
     if (h.length >= 2) { const i = g.chess.turn === 'w' ? 0 : 1; g.clock[i] = Math.max(0, g.clock[i] - (t - g.turnStart)); }
     for (let i = 0; i < k; i++) g.chess.undo();
-    g.turnStart = t; g.takebackOffer = null; g.drawOffer = null;
+    if (g.tbLeft[who] > 0) g.tbLeft[who]--;
+    g.turnStart = t; g.drawOffer = null;
     for (const c of ['w', 'b']) sendTo(g.ids[c], gameState(g, g.ids[c]));
     for (const ws of g.watchers) send(ws, gameState(g, null));
-    broadcast(g, { t: 'tookBack', id: g.id, from: who });
+    broadcast(g, { t: 'tookBack', id: g.id, from: who, left: g.tbLeft[who] });
     arm(g);
   }
 
@@ -344,7 +348,7 @@ function createChessServer(opts) {
         const tc = String(m.tc); if (!TIME_CONTROLS.includes(tc) || p.game) return;
         unseek(p); cancelChallenge(p); p.seek = tc;
         if (!seeks.has(tc)) seeks.set(tc, []);
-        const opt = { color: ['w', 'b'].includes(m.color) ? m.color : 'r', ratings: !!m.ratings, takebacks: !!m.takebacks };
+        const opt = { color: ['w', 'b'].includes(m.color) ? m.color : 'r', ratings: !!m.ratings, takebacks: TAKEBACKS.includes(m.takebacks) ? m.takebacks : 0 };
         seeks.get(tc).push(Object.assign({ id: p.id, since: now() }, opt));
         send(ws, Object.assign({ t: 'seeking', tc }, opt)); matchmake(); return;
       }
@@ -388,14 +392,8 @@ function createChessServer(opts) {
       }
       case 'takeback': {
         const g = games.get(m.id); if (!g || g.over || !g.takebacks) return; const c = g.ids.w === p.id ? 'w' : g.ids.b === p.id ? 'b' : null; if (!c) return;
-        const other = c === 'w' ? 'b' : 'w';
-        if (m.op === 'offer') {
-          if (g.takebackOffer === other) return takeBack(g, other);
-          if (!g.chess.history.some(h => h.color === c) || g.takebackOffer === c) return;
-          g.takebackOffer = c; broadcast(g, { t: 'offer', id: g.id, kind: 'takeback', from: c });
-        } else if (m.op === 'accept' && g.takebackOffer === other) takeBack(g, other);
-        else if (m.op === 'decline' && g.takebackOffer === other) { g.takebackOffer = null; broadcast(g, { t: 'declined', id: g.id, kind: 'takeback', from: c }); }
-        return;
+        if (g.tbLeft[c] === 0) return send(ws, { t: 'error', msg: 'You have no takebacks left' });
+        return takeBack(g, c);
       }
       case 'rematch': {
         const g = finished.get(m.id); if (!g) return send(ws, { t: 'error', msg: 'Too late for a rematch' });

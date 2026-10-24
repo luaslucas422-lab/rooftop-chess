@@ -69,33 +69,42 @@ let S = null;
   const em = await a.next('end'); assert.strictEqual(em.reason, 'checkmate'); assert.strictEqual(em.winner, 'b'); assert.strictEqual(em.ratings, null);
   // queue choices: colors and extras have to fit; extras make the game casual
   a.inbox.length = 0; b.inbox.length = 0;
-  a.send({ t: 'seek', tc: '5+0', color: 'w', takebacks: true }); b.send({ t: 'seek', tc: '5+0', color: 'w', takebacks: true });
+  a.send({ t: 'seek', tc: '5+0', color: 'w', takebacks: 3 }); b.send({ t: 'seek', tc: '5+0', color: 'w', takebacks: 3 });
   assert.strictEqual((await a.next('seeking')).color, 'w'); await b.next('seeking'); await wait(1500);
   assert(!a.inbox.some(m => m.t === 'game'), 'two players who both want White are not paired');
-  b.send({ t: 'seek', tc: '5+0', color: 'r' }); await b.next('seeking'); await wait(1500);
-  assert(!a.inbox.some(m => m.t === 'game'), 'different extras are not paired');
-  b.send({ t: 'seek', tc: '5+0', color: 'b', takebacks: true }); await b.next('seeking');
+  b.send({ t: 'seek', tc: '5+0', color: 'r', takebacks: 10 }); await b.next('seeking'); await wait(1500);
+  assert(!a.inbox.some(m => m.t === 'game'), 'a different number of takebacks is not paired');
+  b.send({ t: 'seek', tc: '5+0', color: 'b', takebacks: 3 }); await b.next('seeking');
   const ta = await a.next('game'), tb = await b.next('game'), tid = ta.id;
   assert.strictEqual(ta.you, 'w'); assert.strictEqual(tb.you, 'b');
-  assert.strictEqual(ta.rated, false); assert.strictEqual(ta.takebacks, true); assert.strictEqual(ta.ratings, false);
-  const tm = ['e2e4', 'e7e5', 'g1f3'];
-  for (let i = 0; i < tm.length; i++) { (i % 2 ? b : a).send({ t: 'move', id: tid, uci: tm[i], ply: i }); await a.next('move'); await b.next('move'); }
-  // Black takes back e5 after White already answered: both moves go
-  b.send({ t: 'takeback', id: tid, op: 'offer' }); const tko = await a.next('offer'); await b.next('offer');
-  assert.strictEqual(tko.kind, 'takeback'); assert.strictEqual(tko.from, 'b');
-  a.send({ t: 'takeback', id: tid, op: 'accept' });
-  const sa = await a.next('game'); await b.next('game'); await a.next('tookBack'); await b.next('tookBack');
-  assert.deepStrictEqual(sa.moves, ['e2e4']); assert.strictEqual(sa.turn, 'b'); assert.strictEqual(sa.takebackOffer, null);
-  // a request can be declined, and moving cancels it
-  b.send({ t: 'move', id: tid, uci: 'c7c5', ply: 1 }); await a.next('move'); await b.next('move');
-  b.send({ t: 'takeback', id: tid, op: 'offer' }); await a.next('offer'); await b.next('offer');
-  a.send({ t: 'takeback', id: tid, op: 'decline' }); assert.strictEqual((await b.next('declined')).kind, 'takeback'); await a.next('declined');
-  a.send({ t: 'resign', id: tid }); assert.strictEqual((await a.next('end')).ratings, null); await b.next('end');
+  assert.strictEqual(ta.rated, false); assert.strictEqual(ta.takebacks, 3); assert.deepStrictEqual(ta.takebacksLeft, { w: 3, b: 3 }); assert.strictEqual(ta.ratings, false);
+  const play = async (who, uci) => { who.send({ t: 'sync' }); const n = (await who.next('game')).moves.length; who.send({ t: 'move', id: tid, uci, ply: n }); await a.next('move'); await b.next('move'); };
+  for (const [who, u] of [[a, 'e2e4'], [b, 'e7e5'], [a, 'g1f3']]) await play(who, u);
+  // Black takes back e5 after White already answered – no asking: both moves go at once
+  b.send({ t: 'takeback', id: tid });
+  const sa = await a.next('game'); await b.next('game'); const tk = await a.next('tookBack'); await b.next('tookBack');
+  assert.deepStrictEqual(sa.moves, ['e2e4']); assert.strictEqual(sa.turn, 'b'); assert.deepStrictEqual(sa.takebacksLeft, { w: 3, b: 2 });
+  assert.strictEqual(tk.from, 'b'); assert.strictEqual(tk.left, 2);
+  // just after your own move, only that move goes; after three, there are none left
+  for (let i = 0; i < 2; i++) { await play(b, 'c7c5'); b.send({ t: 'takeback', id: tid }); const st = await b.next('game'); await a.next('game'); assert.deepStrictEqual(st.moves, ['e2e4']); }
+  await play(b, 'c7c5');
+  b.inbox.length = 0; b.send({ t: 'takeback', id: tid }); assert(/no takebacks left/.test((await b.next('error')).msg));
+  a.send({ t: 'takeback', id: tid }); const sw = await a.next('game'); await b.next('game');
+  assert.deepStrictEqual(sw.moves, []); assert.deepStrictEqual(sw.takebacksLeft, { w: 2, b: 0 });
+  a.send({ t: 'abort', id: tid }); assert.strictEqual((await a.next('end')).ratings, null); await b.next('end');
+  // unlimited takebacks
+  a.inbox.length = 0; b.inbox.length = 0;
+  a.send({ t: 'seek', tc: '5+0', takebacks: -1 }); b.send({ t: 'seek', tc: '5+0', takebacks: -1 });
+  const ua = await a.next('game'); await b.next('game'); assert.strictEqual(ua.takebacks, -1);
+  const UW = ua.you === 'w' ? a : b;
+  for (let i = 0; i < 5; i++) { UW.send({ t: 'move', id: ua.id, uci: 'e2e4', ply: 0 }); await a.next('move'); await b.next('move'); UW.send({ t: 'takeback', id: ua.id }); assert.strictEqual((await UW.next('game')).takebacksLeft[ua.you === 'w' ? 'w' : 'b'], -1); }
+  UW.send({ t: 'abort', id: ua.id }); await a.next('end'); await b.next('end');
   // no takebacks in a game that wasn't set up for them
+  a.inbox.length = 0; b.inbox.length = 0;
   a.send({ t: 'seek', tc: '5+0', color: 'b' }); b.send({ t: 'seek', tc: '5+0' }); await a.next('seeking'); await b.next('seeking');
-  const na = await a.next('game'); await b.next('game'); assert.strictEqual(na.you, 'b'); assert.strictEqual(na.rated, true); assert.strictEqual(na.takebacks, false);
+  const na = await a.next('game'); await b.next('game'); assert.strictEqual(na.you, 'b'); assert.strictEqual(na.rated, true); assert.strictEqual(na.takebacks, 0);
   b.send({ t: 'move', id: na.id, uci: 'e2e4', ply: 0 }); await a.next('move'); await b.next('move');
-  b.send({ t: 'takeback', id: na.id, op: 'offer' }); await wait(300); assert(!a.inbox.some(m => m.t === 'offer'), 'no takeback offers when they are off');
+  b.send({ t: 'takeback', id: na.id }); await wait(300); assert(!b.inbox.some(m => m.t === 'game' || m.t === 'tookBack'), 'no takebacks when they are off');
   a.send({ t: 'abort', id: na.id }); await a.next('end'); await b.next('end');
 
   // reconnect: a new socket for the same token replaces the old one; leaderboard lists both
