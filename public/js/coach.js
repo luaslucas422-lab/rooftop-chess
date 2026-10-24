@@ -414,5 +414,47 @@
     }
   }
 
-  return { Live, FACE, LEVELS, UNLOCK, level, extremeOpen, grade, explain, threat, opportunity, openingTip, castleReminder, flipFen, lineGain, forkTargets, cpFor, mateFor, winPct };
+  /* ---------- move ratings during an online game (when both players chose them) ---------- */
+  /* every position gets a quick look in the background; every move then gets Game Review's verdict, and each side an accuracy */
+  class Rater {
+    constructor(ctl) { this.ctl = ctl; this.evals = []; this.busy = false; this.off = false; }
+    get eng() { return engine('rater'); }
+    fenAt(i) { const g = this.ctl.game; return i === 0 ? g.startFen : g.history[i - 1].fen; }
+    /* look at the next position not looked at yet (call after any change to the game) */
+    update() {
+      if (this.busy || this.off) return;
+      const g = this.ctl.game, n = g.history.length;
+      let i = 0; while (i <= n && this.evals[i] && this.evals[i].fen === this.fenAt(i)) i++;
+      this.evals.length = i;   // anything after a takeback is out of date
+      if (i > n) return;
+      const fen = this.fenAt(i), pos = new Chess.Position(fen);
+      if (!pos.hasLegalMove()) { this.evals[i] = { fen, best: null, line: { score: pos.inCheck() ? (pos.turn === Chess.WHITE ? -31000 : 31000) : 0, mate: 0 } }; return this.done(); }
+      this.busy = true;
+      this.eng.request('think', { fen: g.startFen, moves: g.history.slice(0, i).map(h => h.uci), time: 350 }).then(r => {
+        this.busy = false;
+        if (!r || this.off) return;   // interrupted: the next update starts again
+        if (i <= this.ctl.game.history.length && this.fenAt(i) === fen) this.evals[i] = { fen, best: r.best, line: r.lines[0] || { score: 0, mate: 0 } };
+        this.done();
+      });
+    }
+    done() { this.ctl.drawRatings(); this.update(); }
+    /* move number `ply` (from 1): { cls, acc } – or null while it's still being looked at */
+    move(ply) {
+      const g = this.ctl.game, e0 = this.evals[ply - 1], e1 = this.evals[ply], rec = g.history[ply - 1];
+      if (!e0 || !e1 || !rec) return null;
+      const book = g.startFen === Chess.START_FEN && ply <= 24 && Openings.isBook(g.history.slice(0, ply).map(h => h.san), ply - 1);
+      const gr = grade({ color: rec.color, uci: rec.uci, best: e0.best, before: e0.line, after: e1.line, book });
+      return { cls: gr.cls, acc: Math.max(0, Math.min(100, 103.1668 * Math.exp(-0.04354 * gr.loss) - 3.1669)) };
+    }
+    /* each side's accuracy so far, worked out like Game Review's (null before their first rated move) */
+    accuracy() {
+      const xs = { w: [], b: [] }, h = this.ctl.game.history;
+      for (let p = 1; p <= h.length; p++) { const m = this.move(p); if (m) xs[h[p - 1].color].push(m.acc); }
+      const f = a => a.length ? (a.reduce((x, y) => x + y, 0) / a.length + a.length / a.reduce((x, y) => x + 1 / Math.max(1, y), 0)) / 2 : null;
+      return { w: f(xs.w), b: f(xs.b) };
+    }
+    stop() { this.off = true; this.eng.stop(); }
+  }
+
+  return { Live, Rater, FACE, LEVELS, UNLOCK, level, extremeOpen, grade, explain, threat, opportunity, openingTip, castleReminder, flipFen, lineGain, forkTargets, cpFor, mateFor, winPct };
 });

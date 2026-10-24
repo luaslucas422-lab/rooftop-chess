@@ -121,30 +121,42 @@
   }
   function online(el, params) {
     let tc = params.tc || Store.data.lastTc || '10+0', seeking = false, t0 = 0, iv = null;
+    // what you're looking for: you're only paired with someone whose choices fit (colors that don't clash, the same extras)
+    const opt = Object.assign({ color: 'r', ratings: false, takebacks: false }, Store.data.lastSeek);
+    const casual = () => opt.ratings || opt.takebacks;
+    const optText = () => [opt.color === 'w' ? 'as White' : opt.color === 'b' ? 'as Black' : '', opt.ratings ? 'move ratings' : '', opt.takebacks ? 'takebacks' : '', casual() ? 'casual' : ''].filter(Boolean).join(' · ');
+    const sw = (id, on, name, text) => '<label class="row gap" style="margin:12px 2px"><span class="grow"><b>' + name + '</b><span class="small muted" style="display:block">' + text + '</span></span><span class="switch"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '><span></span></span></label>';
     const draw = () => {
       const R = Store.data.online.ratings || {}, cat = catOf(tc);
       el.innerHTML = top('Play online', '<button class="iconbtn" data-go="leaders" aria-label="Leaderboard">' + icon('chart') + '</button>') + '<div class="page" style="padding-top:4px">' +
-        (seeking ? '<div class="card center" style="padding:30px 16px"><div class="spin"></div><h2 style="margin-top:16px">Finding an opponent</h2><p class="muted">' + tcText(tc) + ' · ' + cat + ' · your rating ' + rr(R[cat]) + '</p><p class="big-t" style="font:800 26px ui-monospace,monospace" data-t>0:00</p>' +
+        (seeking ? '<div class="card center" style="padding:30px 16px"><div class="spin"></div><h2 style="margin-top:16px">Finding an opponent</h2><p class="muted">' + tcText(tc) + ' · ' + cat + (casual() ? '' : ' · your rating ' + rr(R[cat])) + (optText() ? '<br>' + esc(optText()) : '') + '</p><p class="big-t" style="font:800 26px ui-monospace,monospace" data-t>0:00</p>' +
           '<p class="small muted" data-hint></p><button class="btn ghost" data-a="cancel">Cancel</button></div>' :
-          tcPicker(tc) + '<div class="row gap" style="margin:16px 2px 12px"><span class="muted small grow">Your ' + cat + ' rating</span><b>' + rr(R[cat]) + '</b></div><button class="btn primary big" data-a="play">Play ' + tcText(tc) + '</button>' +
+          tcPicker(tc) +
+          '<div class="tc-label">I play</div><div class="seg">' + [['w', 'White'], ['r', 'Random'], ['b', 'Black']].map(([k, n]) => '<button data-color="' + k + '" class="' + (opt.color === k ? 'on' : '') + '">' + n + '</button>').join('') + '</div>' +
+          sw('opt-ratings', opt.ratings, 'Move ratings', 'Show how good every move is (best, mistake, blunder…) and both players’ accuracy during the game') +
+          sw('opt-takebacks', opt.takebacks, 'Takebacks', 'Either player can ask to take back a move; the other one says yes or no') +
+          '<p class="small muted" style="margin:0 2px">You’re only matched with players who chose the same. ' + (casual() ? '<b>These games are casual – your rating doesn’t change.</b>' : 'Picking a color can take longer to find a game.') + '</p>' +
+          '<div class="row gap" style="margin:16px 2px 12px"><span class="muted small grow">Your ' + cat + ' rating</span><b>' + (casual() ? 'casual game' : rr(R[cat])) + '</b></div><button class="btn primary big" data-a="play">Play ' + tcText(tc) + '</button>' +
           '<p class="small muted center net-line" style="margin-top:12px"></p>') + '</div>';
       netLine();
     };
     const netLine = () => { const l = $('.net-line', el); if (!l) return; l.innerHTML = Net.state === 'online' ? '● Connected · ' + ((Net.me && Net.me.stats && Net.me.stats.online) || 1) + ' online' : Net.state === 'connecting' ? 'Connecting to the server…' : 'Can’t reach the server. <a href="#" data-go="settings">Server settings</a>'; };
     const start = async () => {
       if (!(await Net.ready(6000))) { draw(); return toast('Can’t reach the server right now'); }
-      Store.data.lastTc = tc; Store.save();
-      if (Net.send({ t: 'seek', tc })) { seeking = true; t0 = Date.now(); draw(); }
+      Store.data.lastTc = tc; Store.data.lastSeek = Object.assign({}, opt); Store.save();
+      if (Net.send(Object.assign({ t: 'seek', tc }, opt))) { seeking = true; t0 = Date.now(); draw(); }
     };
     const tick = () => {
       if (!seeking) return; const s = Math.floor((Date.now() - t0) / 1000), t = $('[data-t]', el), h = $('[data-hint]', el);
       if (t) t.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
-      if (h && s >= 20) h.innerHTML = 'Not many people online right now. You can keep waiting, <a href="#" data-go="friend">invite a friend</a> or <a href="#" data-go="bots">play a bot</a>.';
+      if (h && s >= 20) h.innerHTML = 'Not many people online right now' + (opt.color !== 'r' || casual() ? ' with the same choices – Random color and no extras find a game fastest' : '') + '. You can keep waiting, <a href="#" data-go="friend">invite a friend</a> or <a href="#" data-go="bots">play a bot</a>.';
     };
     iv = setInterval(tick, 500);
     const offs = [Net.on('state', netLine), Net.on('seeking', () => { seeking = true; }), Net.on('unseeked', () => { seeking = false; draw(); })];
+    el.addEventListener('change', e => { if (e.target.id === 'opt-ratings') opt.ratings = e.target.checked; if (e.target.id === 'opt-takebacks') opt.takebacks = e.target.checked; if (/^opt-/.test(e.target.id)) draw(); });
     el.addEventListener('click', e => {
       const b = e.target.closest('[data-tc]'); if (b) { tc = b.dataset.tc; return draw(); }
+      const col = e.target.closest('[data-color]'); if (col && !seeking) { opt.color = col.dataset.color; return draw(); }
       const g = e.target.closest('[data-go]'); if (g) { e.preventDefault(); return App.go(g.dataset.go); }
       const a = e.target.closest('[data-a]'); if (!a) return;
       if (a.dataset.a === 'play') start();

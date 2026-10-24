@@ -62,6 +62,9 @@
       this.drawOffer = o.drawOffer || null; this.rematchOffer = null; this.online = o.online || { w: true, b: true };
       this.premove = null; this.hintMove = null; this.assisted = false;
       this.coach = null; this.coachGate = null; this.coached = false;   // Coach Mira (bot games)
+      // online games set up with move ratings and/or takebacks (both players chose them when they queued)
+      this.takebacks = !!o.takebacks; this.takebackOffer = o.takebackOffer || null;
+      this.rater = o.ratings ? new Coach.Rater(this) : null;
       this.offs = [];
       const st = this.game.status(); if (st.over) this.over = st;
       if (o.over) this.over = o.over;
@@ -114,6 +117,7 @@
     unmount() { clearInterval(this.timer); this.el = null; this.board = null; }
 
     draw(animate) {
+      if (this.rater) this.rater.update();
       if (!this.el) return;
       const g = this.game, h = g.history, ply = this.view == null ? h.length : this.view;
       const fen = ply === 0 ? g.startFen : h[ply - 1].fen, last = ply ? h[ply - 1] : null;
@@ -128,11 +132,20 @@
       this.board.set({ fen, lastMove: last ? [last.from, last.to] : null, check, movable, turn: fen.split(' ')[1], dests, animate: animate !== false });
       this.board.setArrows(this.hintMove && live ? [{ from: this.hintMove.slice(0, 2), to: this.hintMove.slice(2, 4), color: 'rgba(90,168,239,.9)' }] : []);
       this.board.setMarks(this.hintMove && live ? { [this.hintMove.slice(0, 2)]: 'hint' } : {});
+      this.drawBadge();
       this.drawBars(fen); this.drawMoves(); this.drawActions(); this.drawStatus();
       const title = this.title();
       for (const t of $$('.gv-title', this.el)) t.textContent = title;
       const op = Openings.name(this.sans.slice(0, ply));
       for (const o of $$('.opening', this.el)) o.textContent = op;
+    }
+    /* move ratings (when the game has them): a new verdict came in */
+    drawRatings() { if (!this.el) return; this.drawMoves(); this.drawBars(this.currentFen()); this.drawBadge(); }
+    drawBadge() {
+      if (!this.rater || !this.board) return;
+      const h = this.game.history, ply = this.view == null ? h.length : this.view, m = ply ? this.rater.move(ply) : null, C = m && Analysis.CLS[m.cls];
+      this.board.setBadge(C ? { sq: h[ply - 1].to, text: C.sym } : null);
+      const b = $('.badge', this.el); if (b && C) b.style.background = C.color;
     }
     title() {
       if (this.mode === 'bot') return 'vs ' + this.bot.name + ' (' + this.bot.rating + ')';
@@ -152,7 +165,9 @@
         const waiting = this.coach && this.coach.release;   // the coach has stopped the game
         const thinking = this.thinking && !waiting && ((this.mode === 'bot' && c !== this.me) || (this.mode === 'battle' && c === this.game.turn)) ? '<span class="thinking"><i></i><i></i><i></i></span>' : '';
         const diff = c === 'w' ? mat.diff : -mat.diff;
+        const acc = this.rater ? this.rater.accuracy()[c] : null;
         bar.innerHTML = UI.avatarHtml(p, 36) + '<div class="who"><div class="nm"><span class="ellipsis">' + esc(p.name) + '</span>' + rating + dot + thinking + '</div><div class="caps">' + capsHtml(mat[c], diff) + '</div></div>' +
+          (acc != null ? '<span class="chip" title="Accuracy">' + acc.toFixed(0) + '%</span>' : '') +
           (this.clock ? '<div class="clock" data-clock="' + c + '"></div>' : '');
       }
       this.tick(true);
@@ -186,7 +201,8 @@
         const idx = i + (startBlack ? 1 : 0);
         if (idx % 2 === 0) s += '<span class="mn">' + (startN + idx / 2) + '.</span>';
         else if (i === 0) s += '<span class="mn">' + startN + '…</span><span></span>';
-        s += '<button data-act="goto" data-ply="' + (i + 1) + '" class="' + (cur === i + 1 ? 'cur' : '') + '">' + esc(r.san) + '</button>';
+        const m = this.rater && this.rater.move(i + 1), C = m && Analysis.CLS[m.cls];
+        s += '<button data-act="goto" data-ply="' + (i + 1) + '" class="' + (cur === i + 1 ? 'cur' : '') + '">' + esc(r.san) + (C ? '<span class="cls" style="background:' + C.color + '" title="' + C.name + '">' + C.sym + '</span>' : '') + '</button>';
       });
       if (!h.length) s = '<span class="faint small" style="padding:4px 8px">' + (this.mode === 'watch' ? 'Waiting for the first move…' : 'Make your move!') + '</span>';
       for (const m of $$('.moves', this.el)) {
@@ -211,18 +227,21 @@
       } else if (this.mode === 'online') {
         if (n < 2) b('abort', 'x', 'Abort');
         else b('draw', 'half', this.drawOffer && this.drawOffer !== this.me ? 'Accept draw' : this.drawOffer === this.me ? 'Offered' : 'Draw', this.drawOffer === this.me ? 'disabled' : this.drawOffer ? 'class="hot"' : '');
+        if (this.takebacks) { const theirs = this.takebackOffer && this.takebackOffer !== this.me;
+          b('takeback', 'undo', theirs ? 'Allow' : this.takebackOffer === this.me ? 'Asked' : 'Takeback', theirs ? 'class="hot"' : this.takebackOffer === this.me || !this.game.history.some(h => h.color === this.me) ? 'disabled' : ''); }
         b('resign', 'flag', 'Resign', n < 2 ? 'disabled' : '');
         b('chat', 'chat', 'Chat');
       } else if (this.mode === 'watch' || this.mode === 'battle') b('flip', 'flip', 'Flip');
       b('prev', 'prev', 'Back', (this.view == null ? n : this.view) > 0 ? '' : 'disabled');
       b('next', 'next', 'Forward', this.view != null && this.view < n ? '' : 'disabled');
-      for (const el of $$('.actions', this.el)) el.innerHTML = a.join('');
+      for (const el of $$('.actions', this.el)) { el.innerHTML = a.join(''); el.classList.toggle('many', a.length > 6); }
     }
     drawStatus() {
       let s = '';
       if (this.over) s = '<span>' + esc(this.resultTitle()) + ' <span class="muted">· ' + esc(this.reasonText()) + '</span></span>';
       else if (this.mode === 'online' && Net.state !== 'online') s = '<span class="warn">Reconnecting… your clock keeps running</span>';
       else if (this.mode === 'online' && this.drawOffer && this.drawOffer !== this.me) s = '<span>Your opponent offers a draw</span><button class="btn sm primary" data-act="draw">Accept</button><button class="btn sm" data-act="decline">No</button>';
+      else if (this.mode === 'online' && this.takebackOffer && this.takebackOffer !== this.me) s = '<span>Your opponent wants to take back a move</span><button class="btn sm primary" data-act="takeback">Allow</button><button class="btn sm" data-act="declinetb">No</button>';
       else if (this.mode === 'online' && this.online[otherC(this.me)] === false) s = '<span class="warn">Your opponent disconnected – they have 90 seconds to come back</span>';
       else if (this.mode === 'online' && this.game.history.length < 2 && this.firstDeadline) { const left = Math.max(0, Math.ceil((this.firstDeadline - performance.now()) / 1000)); s = '<span class="muted">' + (this.game.turn === this.me ? 'Your move' : 'Waiting for their first move') + (left < 25 ? ' · ' + left + 's' : '') + '</span>'; }
       else if (this.mode === 'local') s = '<span class="muted">' + (this.game.turn === 'w' ? 'White' : 'Black') + ' to move</span>';
@@ -316,7 +335,7 @@
     /* online: a move from the server (ours echoed back, or theirs) */
     serverMove(m) {
       const n = this.game.history.length;
-      this.clock = m.clock.slice(); this.clockAt = performance.now(); this.running = m.running; this.drawOffer = m.drawOffer || null;
+      this.clock = m.clock.slice(); this.clockAt = performance.now(); this.running = m.running; this.drawOffer = m.drawOffer || null; this.takebackOffer = null;
       if (m.ply === 1) this.firstDeadline = performance.now() + 30000;   // Black now has 30s for their first move
       if (m.ply === n) { this.tick(true); this.drawActions(); this.drawStatus(); return; }   // our own move, confirmed
       if (m.ply !== n + 1) { Net.send({ t: 'sync' }); return; }
@@ -335,8 +354,8 @@
     syncState(s) {
       // full state from the server: rebuild if our moves differ
       const mine = this.ucis.join(' '), theirs = s.moves.join(' ');
-      if (mine !== theirs) { this.game = new Chess.Game(); for (const u of s.moves) this.game.move(u); this.view = null; }
-      this.clock = s.clock.slice(); this.clockAt = performance.now(); this.running = s.running; this.drawOffer = s.drawOffer; this.online = s.online || this.online;
+      if (mine !== theirs) { this.game = new Chess.Game(); for (const u of s.moves) this.game.move(u); this.view = null; this.premove = null; if (this.board) this.board.clearPremove(); }
+      this.clock = s.clock.slice(); this.clockAt = performance.now(); this.running = s.running; this.drawOffer = s.drawOffer; this.takebackOffer = s.takebackOffer || null; this.online = s.online || this.online;
       if (s.firstMoveLeft != null) this.firstDeadline = performance.now() + s.firstMoveLeft;
       if (s.over && !this.over) this.serverEnd(Object.assign({ id: s.id }, s.over));
       this.draw(false);
@@ -413,6 +432,12 @@
           return;
         }
         case 'takeback': {
+          if (this.mode === 'online') {   // ask (or allow theirs); the server takes the moves back when both agree
+            if (!this.takebacks || this.over) return;
+            if (this.takebackOffer && this.takebackOffer !== this.me) { Net.send({ t: 'takeback', id: this.id, op: 'accept' }); return; }
+            if (Net.send({ t: 'takeback', id: this.id, op: 'offer' })) { this.takebackOffer = this.me; this.drawActions(); toast('Takeback requested'); }
+            return;
+          }
           if (!n) return;
           this.token++; this.thinking = false; this.coachGate = null; engine('bot').stop();
           if (this.mode === 'bot') { this.assisted = true; g.undo(); if (g.turn !== this.me && g.history.length) g.undo(); }
@@ -439,6 +464,7 @@
           return;
         }
         case 'decline': Net.send({ t: 'draw', id: this.id, op: 'decline' }); this.drawOffer = null; return this.draw(false);
+        case 'declinetb': Net.send({ t: 'takeback', id: this.id, op: 'decline' }); this.takebackOffer = null; return this.draw(false);
         case 'chat': {
           const s = sheet('<h3>Say something</h3><div class="row wrap gap4">' + Net.chat.map((c, i) => '<button class="btn sm" data-i="' + i + '">' + esc(c) + '</button>').join('') + '</div>');
           s.addEventListener('click', e => { const b = e.target.closest('[data-i]'); if (b) { Net.send({ t: 'chat', id: this.id, i: +b.dataset.i }); s.close(); } });
@@ -564,8 +590,10 @@
       this.current = ctl; App.go('game'); Sound.play('start');
     },
     fromServer(s) {
+      engine('rater').stop();   // a new game on screen: its own move ratings start from scratch
       const tc = (() => { const [b, i] = s.tc.split('+').map(Number); return { base: b * 60000, inc: i * 1000 }; })();
-      const ctl = new GameCtl({ mode: s.you ? 'online' : 'watch', me: s.you || 'w', id: s.id, players: { w: s.white, b: s.black }, moves: s.moves, tc, clock: s.clock, running: s.running, rated: s.rated, cat: s.cat, drawOffer: s.drawOffer, online: s.online });
+      const ctl = new GameCtl({ mode: s.you ? 'online' : 'watch', me: s.you || 'w', id: s.id, players: { w: s.white, b: s.black }, moves: s.moves, tc, clock: s.clock, running: s.running, rated: s.rated, cat: s.cat, drawOffer: s.drawOffer, online: s.online,
+        ratings: s.ratings, takebacks: s.takebacks, takebackOffer: s.takebackOffer });
       if (!s.you) ctl.me = null;
       if (s.firstMoveLeft != null) ctl.firstDeadline = performance.now() + s.firstMoveLeft;
       if (s.over) { ctl.over = { over: true, winner: s.over.winner, reason: s.over.reason, result: s.over.result }; ctl.ratingChange = s.over.ratings; ctl.ended = true; }
@@ -602,9 +630,12 @@
   Net.on('offer', m => {
     const c = forGame(m.id); if (!c) return;
     if (m.kind === 'draw') { c.drawOffer = m.from; c.draw(false); if (m.from !== c.me && c.me) Sound.play('notify'); }
+    if (m.kind === 'takeback') { c.takebackOffer = m.from; c.draw(false); if (m.from !== c.me && c.me) Sound.play('notify'); }
     if (m.kind === 'rematch' && m.from !== c.me) { c.rematchOffer = 'them'; c.drawActions(); Sound.play('notify'); toast('Your opponent wants a rematch'); }
   });
-  Net.on('declined', m => { const c = forGame(m.id); if (!c) return; if (m.kind === 'draw') { c.drawOffer = null; c.draw(false); if (m.from !== c.me) toast('Draw declined'); } if (m.kind === 'rematch') { c.rematchOffer = null; c.drawActions(); toast('Rematch declined'); } });
+  Net.on('declined', m => { const c = forGame(m.id); if (!c) return; if (m.kind === 'draw') { c.drawOffer = null; c.draw(false); if (m.from !== c.me) toast('Draw declined'); } if (m.kind === 'rematch') { c.rematchOffer = null; c.drawActions(); toast('Rematch declined'); }
+    if (m.kind === 'takeback') { c.takebackOffer = null; c.draw(false); if (m.from !== c.me) toast('Takeback declined'); } });
+  Net.on('tookBack', m => { const c = forGame(m.id); if (c) toast(m.from === c.me ? 'Your move was taken back' : 'Their move was taken back'); });
   Net.on('presence', m => { const c = forGame(m.id); if (!c) return; c.online[m.color] = m.online; c.draw(false); });
   Net.on('chat', m => { const c = forGame(m.id); if (c) { c.showChat(m.from, Net.chat[m.i] || ''); if (m.from !== c.me) Sound.play('notify'); } });
   Net.on('error', m => toast(m.msg));

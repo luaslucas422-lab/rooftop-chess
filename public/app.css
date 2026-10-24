@@ -181,6 +181,8 @@ body.bigclock .clock { font-size: 26px; min-width: 112px; }
 .actions button:active { background: var(--card2); }
 .actions button.hot { color: var(--accent); }
 .actions button:disabled { opacity: .35; }
+.actions.many button { min-width: 0; flex: 1; padding: 4px 2px; }
+.pbar .chip { flex-shrink: 0; }
 .gv-side { display: none; }
 .gv-status { text-align: center; font-weight: 700; padding: 6px 12px; min-height: 34px; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; }
 .evalbar { width: 18px; border-radius: 4px; overflow: hidden; background: #3b3b3b; position: relative; flex-shrink: 0; }
