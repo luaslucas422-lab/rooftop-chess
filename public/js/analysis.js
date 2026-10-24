@@ -3,8 +3,7 @@
   'use strict';
   const { esc, $, $$, toast, sheet } = UI;
   const icon = Play.icon;
-  const winPct = cp => 50 + 50 * (2 / (1 + Math.exp(-0.00368208 * cp)) - 1);
-  const cpOf = e => e.mate ? (e.mate > 0 ? 10000 - e.mate * 10 : -10000 - e.mate * 10) : Math.max(-10000, Math.min(10000, e.score));
+  const { winPct, cpOf } = Rating;
   const evalText = e => e.mate ? (e.mate > 0 ? '' : '-') + 'M' + Math.abs(e.mate) : Math.abs(e.score) >= Engine_MATE_BOUND() ? (e.score > 0 ? '1-0' : '0-1') : (e.score >= 0 ? '+' : '') + (e.score / 100).toFixed(1);
   function Engine_MATE_BOUND() { return 30000; }
 
@@ -224,7 +223,7 @@
       const r = h[i], before = evals[i], after = evals[i + 1]; if (!before || !after) break;
       const sign = r.color === 'w' ? 1 : -1;
       const wpB = winPct(sign * cpOf(before)), wpA = winPct(sign * cpOf(after)), loss = Math.max(0, wpB - wpA);
-      const acc = Math.max(0, Math.min(100, 103.1668 * Math.exp(-0.04354 * loss) - 3.1669));
+      const acc = Rating.moveAccuracy(loss);
       let c;
       const best = before.best, isBest = r.uci === best;
       if (Openings.isBook(sans, i) && i < 24) c = 'book';
@@ -240,15 +239,19 @@
     }
     return out;
   }
-  function summarize(cl) {
+  /* each side's accuracy, counts and game rating. ctx (optional): { players: { w, b } with ratings, winner, over } – a known
+     opponent rating and result make the game rating more accurate (see Rating.gameRating) */
+  function summarize(cl, ctx) {
     const res = {};
     for (const c of ['w', 'b']) {
       const xs = cl.filter(x => x.color === c).map(x => x.acc);
       if (!xs.length) { res[c] = { acc: 0, counts: {}, rating: 0 }; continue; }
-      const mean = xs.reduce((a, b) => a + b, 0) / xs.length, harm = xs.length / xs.reduce((a, b) => a + 1 / Math.max(1, b), 0);
-      const acc = (mean + harm) / 2;
+      const acc = Rating.accuracy(xs), o = c === 'w' ? 'b' : 'w';
       const counts = {}; for (const x of cl) if (x.color === c) counts[x.cls] = (counts[x.cls] || 0) + 1;
-      res[c] = { acc, counts, rating: Math.max(100, Math.min(3000, Math.round(3200 * Math.pow(acc / 100, 3.5) / 25) * 25)) };
+      const P = ctx && ctx.players || {}, rated = x => x && x.rating != null ? x.rating : null;
+      const opp = ctx && ctx.over ? rated(P[o]) : null, own = P[c] && !P[c].provisional ? rated(P[c]) : null;
+      // a handful of moves says too little about a player to put a number on it
+      res[c] = { acc, counts, rating: xs.length < 8 ? null : Rating.gameRating({ acc, opp, own, score: ctx && ctx.winner === c ? 1 : ctx && ctx.winner ? 0 : 0.5 }) };
     }
     return res;
   }
@@ -259,14 +262,15 @@
     try { g = Chess.Game.fromPgn(params.pgn); } catch (e) { toast('Could not read that game'); App.go('home'); return; }
     const final = g.status(); g.forced = null;
     const moves = g.history.map(h => h.uci), me = params.me || 'w';
-    const players = params.players || { w: { name: g.headers.White || 'White' }, b: { name: g.headers.Black || 'Black' } };
+    const elo = k => /^\d{3,4}$/.test(g.headers[k] || '') ? +g.headers[k] : null;
+    const players = params.players || { w: { name: g.headers.White || 'White', rating: elo('WhiteElo') }, b: { name: g.headers.Black || 'Black', rating: elo('BlackElo') } };
     let ply = 0, orientation = params.me === 'b' ? 'b' : 'w', cl = null, evals = null, sum = null;
     const key = g.startFen + '|' + moves.join(' ');
     el.innerHTML = '<div class="page" style="padding-top:calc(30px + var(--safeT))"><div class="topbar" style="position:fixed;left:0;right:0;top:0;padding-left:12px"><button class="iconbtn" data-a="back" aria-label="Back">' + icon('back') + '</button><h2>Game Review</h2></div>' +
       '<div class="card center" style="margin-top:30px"><div class="spin"></div><h3 style="margin-top:14px">Reviewing your game…</h3><p class="muted small">The engine checks every move</p><div class="progress"><i style="width:0%"></i></div></div></div>';
     const eng = engine('review');
     const done = (ev) => {
-      evals = ev; cache.set(key, ev); cl = classify(g, evals); sum = summarize(cl);
+      evals = ev; cache.set(key, ev); cl = classify(g, evals); sum = summarize(cl, { players, over: final.over, winner: final.winner });
       layout();
     };
     if (cache.has(key)) setTimeout(() => done(cache.get(key)), 0);
@@ -291,7 +295,7 @@
       const row = c => '<tr><td><span class="cls-dot" style="background:' + CLS[c].color + '">' + CLS[c].sym + '</span>' + CLS[c].name + '</td><td class="n" style="color:' + CLS[c].color + '">' + (sum.w.counts[c] || 0) + '</td><td class="n" style="color:' + CLS[c].color + '">' + (sum.b.counts[c] || 0) + '</td></tr>';
       const h = '<div class="acc-cards"><div class="acc">' + UI.avatarHtml(players.w, 40) + '<div class="small ellipsis">' + esc(players.w.name) + '</div><b>' + sum.w.acc.toFixed(1) + '</b><span class="small muted">accuracy</span></div>' +
         '<div class="acc">' + UI.avatarHtml(players.b, 40) + '<div class="small ellipsis">' + esc(players.b.name) + '</div><b>' + sum.b.acc.toFixed(1) + '</b><span class="small muted">accuracy</span></div></div>' +
-        '<table class="cls-table" style="margin-top:10px"><tr><td class="muted small">Game rating (estimate)</td><td class="n">' + sum.w.rating + '</td><td class="n">' + sum.b.rating + '</td></tr>' + ORDER.map(row).join('') + '</table>' +
+        '<table class="cls-table" style="margin-top:10px"><tr><td class="muted small">Game rating (estimate)</td><td class="n">' + (sum.w.rating || '–') + '</td><td class="n">' + (sum.b.rating || '–') + '</td></tr>' + ORDER.map(row).join('') + '</table>' +
         '<p class="small muted" style="margin-top:10px">' + esc(Openings.name(g.history.map(x => x.san)) || 'Opening') + ' · ' + esc(final.over ? final.result.replace('1/2-1/2', '½-½') + ' ' + final.reason : 'game in progress') + '</p>';
       for (const x of $$('.sum', el)) x.innerHTML = h;
       drawGraph();

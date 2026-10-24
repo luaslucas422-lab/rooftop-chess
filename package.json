@@ -5,7 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "test": "node test/chess.test.js && node test/engine.test.js && node test/coach.test.js && node test/online.test.js",
+    "test": "node test/chess.test.js && node test/engine.test.js && node test/coach.test.js && node test/rating.test.js && node test/online.test.js",
     "puzzles": "node tools/make-puzzles.js",
     "test:browser": "node test/browser.test.js"
   },

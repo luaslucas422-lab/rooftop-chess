@@ -49,6 +49,10 @@
   const back = el => el.addEventListener('click', e => { if (e.target.closest('[data-back]')) App.back(); });
   const miniBoard = (fen, flip) => { const d = document.createElement('div'); d.className = 'mini-board'; const b = new Board(d, { coords: false, animMs: 0, orientation: flip ? 'b' : 'w' }); b.set({ fen, animate: false }); return d; };
   const rr = r => r && r.games ? Math.round(r.r) + (r.provisional ? '?' : '') : '–';
+  /* your rating from bot games (kept on this device) */
+  const botR = () => { const b = Store.data.botRating; return rr(Object.assign({}, b, { provisional: Rating.provisional(b) })); };
+  /* the bot that's the best test for you: the weakest one rated above your bot rating (once you have one) */
+  const goodMatch = () => { const b = Store.data.botRating; if (!b.games) return null; return BOTS.find(x => x.rating > b.r) || BOTS[BOTS.length - 1]; };
 
   /* ---------- home ---------- */
   function home(el) {
@@ -213,12 +217,14 @@
   function bots(el, params) {
     let sel = BOTS.find(b => b.id === Store.data.lastBot) || BOTS[1], color = Store.data.lastColor || 'r', saved = Store.data.coachLevel || (Store.data.coachOn === false ? 'off' : 'normal'),
       coach = params.coach ? (saved === 'off' ? 'beginner' : saved) : saved;   // off | beginner | normal | extreme
+    const match = goodMatch();
     const draw = () => {
       el.innerHTML = top('Play a bot') + '<div class="page" style="padding-top:4px">' +
         '<div class="card row gap" style="align-items:flex-start"><span class="av" style="width:72px;height:72px">' + sel.faceSvg + '</span><div class="grow"><h2 style="margin:0">' + esc(sel.name) + ' <span class="muted" style="font-size:16px">' + sel.rating + '</span></h2><p class="muted small" style="margin:4px 0 0">' + esc(sel.blurb) + '</p>' +
         (Store.data.beaten[sel.id] ? '<span class="chip acc" style="margin-top:6px">Beaten ✓</span>' : '') + '</div></div>' +
         (params.startFen ? '<p class="small muted" style="margin:10px 2px">Starting from the position you set up.</p>' : '') +
-        '<div class="bot-grid" style="margin-top:12px">' + BOTS.map(b => '<button class="bot-card' + (b === sel ? ' on' : '') + '" data-bot="' + b.id + '">' + (Store.data.beaten[b.id] ? '<span class="won">✓</span>' : '') + '<span class="av" style="width:52px;height:52px">' + b.faceSvg + '</span><div class="nm">' + esc(b.name) + '</div><div class="rt">' + b.rating + '</div></button>').join('') + '</div>' +
+        '<div class="row gap" style="margin:12px 2px 0"><span class="muted small grow">Your bot rating' + (Store.data.botRating.games ? '' : ' – win or lose a game without help to get one') + '</span><b>' + botR() + '</b></div>' +
+        '<div class="bot-grid" style="margin-top:12px">' + BOTS.map(b => '<button class="bot-card' + (b === sel ? ' on' : '') + '" data-bot="' + b.id + '">' + (Store.data.beaten[b.id] ? '<span class="won">✓</span>' : '') + '<span class="av" style="width:52px;height:52px">' + b.faceSvg + '</span><div class="nm">' + esc(b.name) + '</div><div class="rt">' + b.rating + '</div>' + (b === match ? '<div class="match">Good match</div>' : '') + '</button>').join('') + '</div>' +
         '<div class="tc-label">I play</div><div class="seg">' + [['w', 'White'], ['r', 'Random'], ['b', 'Black']].map(([k, n]) => '<button data-color="' + k + '" class="' + (color === k ? 'on' : '') + '">' + n + '</button>').join('') + '</div>' +
         coachPick() +
         '<button class="btn primary big" style="margin-top:16px" data-a="play">Play ' + esc(sel.name) + '</button></div>';
@@ -307,8 +313,9 @@
     el.innerHTML = '<div class="page"><div class="row gap"><button data-a="face" style="border:0;background:none;padding:0" aria-label="New face">' + UI.avatarHtml(p, 72) + '</button><div class="grow"><h1 style="margin:0" class="ellipsis">' + esc(p.name || 'Player') + '</h1><div class="small muted">Playing since ' + new Date(p.created).toLocaleDateString() + '</div>' +
       '<button class="btn sm" style="margin-top:6px" data-a="name">Edit name</button></div><button class="iconbtn" data-go="settings" aria-label="Settings">' + icon('gear') + '</button></div>' +
       '<div class="section-title">Ratings</div><div class="stat-grid">' + card('Bullet', rr(R.bullet), (R.bullet ? R.bullet.games : 0) + ' games') + card('Blitz', rr(R.blitz), (R.blitz ? R.blitz.games : 0) + ' games') + card('Rapid', rr(R.rapid), (R.rapid ? R.rapid.games : 0) + ' games') +
-      card('Puzzles', Math.round(P.r), P.solved + ' solved') + card('Rush', Store.data.rush.best, 'best score') + card('Record', w + '/' + l + '/' + d, 'win/loss/draw') + '</div>' +
-      '<div class="section-title">Rating history</div><div class="card"><div class="seg" style="margin-bottom:10px">' + [['puzzle', 'Puzzles'], ['bullet', 'Bullet'], ['blitz', 'Blitz'], ['rapid', 'Rapid']].map(([k, n]) => '<button data-hist="' + k + '">' + n + '</button>').join('') + '</div><div class="hist"></div></div>' +
+      card('Bots', botR(), Store.data.botRating.games + ' rated game' + (Store.data.botRating.games === 1 ? '' : 's')) + card('Puzzles', Math.round(P.r), P.solved + ' solved') + card('Rush', Store.data.rush.best, 'best score') +
+      card('Record', w + '/' + l + '/' + d, 'win/loss/draw') + card('Bots beaten', Object.keys(Store.data.beaten).filter(k => BOTS.some(b => b.id === k)).length + '/' + BOTS.length, 'without help') + card('Games', G.length, 'on this device') + '</div>' +
+      '<div class="section-title">Rating history</div><div class="card"><div class="seg" style="margin-bottom:10px">' + [['puzzle', 'Puzzles'], ['bots', 'Bots'], ['bullet', 'Bullet'], ['blitz', 'Blitz'], ['rapid', 'Rapid']].map(([k, n]) => '<button data-hist="' + k + '">' + n + '</button>').join('') + '</div><div class="hist"></div></div>' +
       '<div class="section-title">Bots beaten</div><div class="row wrap gap4">' + BOTS.map(b => '<span title="' + esc(b.name) + '" style="position:relative;opacity:' + (Store.data.beaten[b.id] ? 1 : .35) + '"><span class="av" style="width:44px;height:44px">' + b.faceSvg + '</span></span>').join('') + '</div>' +
       '<div class="section-title">Games</div>' + (G.length ? '<div class="list">' + G.slice(0, 8).map(gameItem).join('') + '</div>' + (G.length > 8 ? '<button class="btn ghost block" style="margin-top:10px" data-go="games">All ' + G.length + ' games</button>' : '') : '<div class="card empty">No games yet.</div>') +
       '<div class="tiles" style="margin-top:16px"><button class="tile" data-go="leaders"><span class="ic" style="background:#f2cc5b22;color:#f2cc5b">🏆</span><span><b>Leaderboard</b><small>Top online players</small></span></button>' +
@@ -316,7 +323,7 @@
     const drawHist = kind => {
       for (const b of $$('[data-hist]', el)) b.classList.toggle('on', b.dataset.hist === kind);
       const pts = (Store.data.ratingLog || []).filter(x => x.k === kind).slice(-120), box = $('.hist', el);
-      if (pts.length < 2) { box.innerHTML = '<p class="small muted center" style="margin:14px 0">' + (kind === 'puzzle' ? 'Solve a few rated puzzles' : 'Play a few rated ' + kind + ' games') + ' to see your graph.</p>'; return; }
+      if (pts.length < 2) { box.innerHTML = '<p class="small muted center" style="margin:14px 0">' + (kind === 'puzzle' ? 'Solve a few rated puzzles' : kind === 'bots' ? 'Play a few bot games without help' : 'Play a few rated ' + kind + ' games') + ' to see your graph.</p>'; return; }
       const W = 300, H = 90, rs = pts.map(p => p.r), lo = Math.min(...rs) - 10, hi = Math.max(...rs) + 10;
       const xy = pts.map((p, i) => [i / (pts.length - 1) * W, H - (p.r - lo) / (hi - lo) * H]);
       const line = xy.map((q, i) => (i ? 'L' : 'M') + q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join(' ');
@@ -324,7 +331,7 @@
         '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" style="width:100%;height:90px;display:block"><path d="' + line + ' L' + W + ' ' + H + ' L0 ' + H + ' Z" fill="rgba(255,159,67,.15)"/><path d="' + line + '" fill="none" stroke="var(--accent)" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>' +
         '<div class="row tiny faint" style="margin-top:4px"><span>' + new Date(pts[0].t).toLocaleDateString() + '</span><span class="right">' + new Date(pts[pts.length - 1].t).toLocaleDateString() + '</span></div>';
     };
-    const kinds = ['puzzle', 'blitz', 'rapid', 'bullet'];
+    const kinds = ['puzzle', 'bots', 'blitz', 'rapid', 'bullet'];
     drawHist(kinds.find(k => (Store.data.ratingLog || []).filter(x => x.k === k).length >= 2) || 'puzzle');
     el.addEventListener('click', async e => {
       const h = e.target.closest('[data-hist]'); if (h) return drawHist(h.dataset.hist);

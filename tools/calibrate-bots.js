@@ -21,7 +21,7 @@ function playGame(white, black, rand, levels) {
   let lopsided = 0, last = 0;
   for (;;) {
     const st = g.status();
-    if (st.over) return { result: st.result, reason: st.reason, plies: g.history.length };
+    if (st.over) return { result: st.result, reason: st.reason, plies: g.history.length, moves: g.history.map(h => h.uci) };
     const { pos, history } = E.replay(g.startFen, g.history.map(h => h.uci));
     const r = B.choose(S[g.turn], pos, history, g.history.map(h => h.san), L[g.turn], rand);
     if (!r || !g.move(r.uci)) throw new Error('bot made no move');
@@ -30,15 +30,17 @@ function playGame(white, black, rand, levels) {
       const w = judgeScore(judge, g);
       if (Math.abs(w) >= 1000 && Math.sign(w) === Math.sign(last)) lopsided++; else lopsided = Math.abs(w) >= 1000 ? 1 : 0;
       last = w;
-      if (lopsided >= 2) return { result: w > 0 ? '1-0' : '0-1', reason: 'judged', plies: n };
+      if (lopsided >= 2) return { result: w > 0 ? '1-0' : '0-1', reason: 'judged', plies: n, moves: g.history.map(h => h.uci) };
     }
-    if (n >= 260) { const w = judgeScore(judge, g); return { result: w > 250 ? '1-0' : w < -250 ? '0-1' : '1/2-1/2', reason: 'long game', plies: n }; }
+    if (n >= 260) { const w = judgeScore(judge, g); return { result: w > 250 ? '1-0' : w < -250 ? '0-1' : '1/2-1/2', reason: 'long game', plies: n, moves: g.history.map(h => h.uci) }; }
   }
 }
 
 function eloDiff(score) { if (score <= 0) return -800; if (score >= 1) return 800; return 400 * Math.log10(score / (1 - score)); }
 
-if (process.argv[2] === 'play') {
+module.exports = { playGame, rng };   // tools/calibrate-review.js plays its games with these
+
+if (require.main !== module) { /* used as a library */ } else if (process.argv[2] === 'play') {
   const [, , , a, b, n, out, seed] = process.argv;
   const levels = Object.assign({}, B.LEVELS, process.env.LEVELS ? JSON.parse(process.env.LEVELS) : {});   // LEVELS='{"otto":{...}}' to try changes
   if (!levels[a] || !levels[b]) throw new Error('unknown bot');
@@ -48,7 +50,7 @@ if (process.argv[2] === 'play') {
   for (let i = 0; i < +n; i++) {
     const white = i % 2 ? b : a, black = i % 2 ? a : b;
     const r = playGame(white, black, rand, levels);
-    res.games.push(Object.assign({ white, black }, r));
+    delete r.moves; res.games.push(Object.assign({ white, black }, r));
     fs.writeFileSync(out, JSON.stringify(res));
   }
   console.log(a, 'vs', b, n, 'games in', Math.round((Date.now() - t0) / 1000) + 's');

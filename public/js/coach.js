@@ -444,14 +444,13 @@
       if (!e0 || !e1 || !rec) return null;
       const book = g.startFen === Chess.START_FEN && ply <= 24 && Openings.isBook(g.history.slice(0, ply).map(h => h.san), ply - 1);
       const gr = grade({ color: rec.color, uci: rec.uci, best: e0.best, before: e0.line, after: e1.line, book });
-      return { cls: gr.cls, acc: Math.max(0, Math.min(100, 103.1668 * Math.exp(-0.04354 * gr.loss) - 3.1669)) };
+      return { cls: gr.cls, acc: Rating.moveAccuracy(gr.loss) };
     }
     /* each side's accuracy so far, worked out like Game Review's (null before their first rated move) */
     accuracy() {
       const xs = { w: [], b: [] }, h = this.ctl.game.history;
       for (let p = 1; p <= h.length; p++) { const m = this.move(p); if (m) xs[h[p - 1].color].push(m.acc); }
-      const f = a => a.length ? (a.reduce((x, y) => x + y, 0) / a.length + a.length / a.reduce((x, y) => x + 1 / Math.max(1, y), 0)) / 2 : null;
-      return { w: f(xs.w), b: f(xs.b) };
+      return { w: Rating.accuracy(xs.w), b: Rating.accuracy(xs.b) };
     }
     stop() { this.off = true; this.eng.stop(); }
   }

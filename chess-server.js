@@ -88,7 +88,7 @@ function createChessServer(opts) {
   /* a rating card: the player's ratings, signed, for their phone to keep */
   function makeCard(pr) {
     const ratings = {};
-    for (const c in pr.ratings) { const r = pr.ratings[c]; ratings[c] = { r: r.r, rd: r.rd, at: r.at || 0, games: r.games || 0, w: r.w || 0, l: r.l || 0, d: r.d || 0, best: Math.round(r.best || r.r) }; }
+    for (const c in pr.ratings) { const r = pr.ratings[c]; ratings[c] = { r: r.r, rd: r.rd, vol: r.vol || 0.06, at: r.at || 0, games: r.games || 0, w: r.w || 0, l: r.l || 0, d: r.d || 0, best: Math.round(r.best || r.r) }; }
     const body = Buffer.from(JSON.stringify({ id: pr.id, ratings, t: pr.updated || 0 })).toString('base64url');
     return body + '.' + sign(body);
   }
@@ -108,7 +108,7 @@ function createChessServer(opts) {
     if (!o || !(o.t > (pr.updated || 0))) return false;
     for (const c of ['bullet', 'blitz', 'rapid']) {
       const r = o.ratings[c]; if (!r || !Number.isFinite(r.r) || !Number.isFinite(r.rd)) continue;
-      pr.ratings[c] = { r: Math.max(100, Math.min(4000, r.r)), rd: Math.max(45, Math.min(350, r.rd)), at: +r.at || 0, games: r.games | 0, w: r.w | 0, l: r.l | 0, d: r.d | 0, best: Math.max(100, Math.min(4000, +r.best || r.r)) };
+      pr.ratings[c] = { r: Math.max(100, Math.min(4000, r.r)), rd: Math.max(45, Math.min(350, r.rd)), vol: Math.max(0.03, Math.min(0.15, +r.vol || 0.06)), at: +r.at || 0, games: r.games | 0, w: r.w | 0, l: r.l | 0, d: r.d | 0, best: Math.max(100, Math.min(4000, +r.best || r.r)) };
     }
     pr.updated = o.t;
     return true;

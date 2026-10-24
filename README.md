@@ -34,13 +34,13 @@ If you want a permanent leaderboard (it otherwise only lists people who have con
 to a Postgres database and ratings are stored there too. Note that Render's free Postgres databases expire after 30 days.
 
 ## What's in it
-- **Play online** – bullet, blitz and rapid (1|0 up to 30|0): pick your color, and choose whether the game shows **move ratings** (every move's verdict and both players' accuracy, live) and how many **takebacks** each player gets (none, 3, 10 or unlimited – take back your last move whenever you like, no asking) – you're only paired with players who chose the same, and games with either extra are casual. Matchmaking, clocks kept on the server (with a little time given back for slow connections), Glicko ratings, draw offers, rematches, preset quick chat, premoves, leaderboard.
+- **Play online** – bullet, blitz and rapid (1|0 up to 30|0): pick your color, and choose whether the game shows **move ratings** (every move's verdict and both players' accuracy, live) and how many **takebacks** each player gets (none, 3, 10 or unlimited – take back your last move whenever you like, no asking) – you're only paired with players who chose the same, and games with either extra are casual. Matchmaking, clocks kept on the server (with a little time given back for slow connections), Glicko-2 ratings (the system Lichess uses), draw offers, rematches, preset quick chat, premoves, leaderboard.
 - **Play a friend** – a 6-letter code or a share link; casual or rated.
-- **Play a bot** – 12 characters from 250 to 2800, with takebacks, hints, chatty personalities and "beaten" badges. Their ratings come from playing them against each other (each beats the one below 3 or 4 games in 5, see below); Titan, the full-strength engine, is an estimate.
+- **Play a bot** – 12 characters from 250 to 2800, with takebacks, hints, chatty personalities and "beaten" badges. Their ratings come from playing them against each other (each beats the one below 3 or 4 games in 5, see below); Titan, the full-strength engine, is an estimate. Games you play without help (no coach, hints or takebacks) give you a **bot rating** – Glicko-2 against the bots' measured ratings – and the bots screen marks a good match for your level.
 - **Coach Mira** – pick her level when you choose a bot (or from Learn, or the game menu): **Beginner** rates moves gently and gives lots of warnings and tips, **Normal** rates like Game Review, and **Extreme** – unlocked after 20 finished games – rates strictly, looks deeper, and gives no warnings or tips. She checks every move you make: a mistake stops the game and she says what went wrong ("Your queen on e4 isn’t protected there – dxe4 takes it"), and you can take it back, see the best move, or play on. On your turn she warns you about threats, tells you when the bot slips, and gives opening tips. Games with her help don’t earn the "beaten" badge.
 - **Pass & play** – two people on one device, with an optional clock.
 - **Puzzles** – 831 puzzles with your own puzzle rating (easier / normal / harder), Puzzle Rush (3 minutes, 3 strikes), a daily puzzle and themes.
-- **Game Review** – every move rated (best, brilliant, great, mistake, blunder…) with accuracy, an eval graph and an explanation; jump between key moments, retry your mistakes, and play through the engine's best line.
+- **Game Review** – every move rated (best, brilliant, great, mistake, blunder…) with accuracy, a game rating (see below), an eval graph and an explanation; jump between key moments, retry your mistakes, and play through the engine's best line.
 - **Analysis board** – engine with the top 3 lines and an eval bar, known opening moves, a position editor, and PGN/FEN import and export. On a computer, right-click to draw arrows.
 - **Learn** – "how the pieces move" lessons, checkmate drills against the engine, and the rules.
 - **Watch** – spectate live games, or set two bots against each other.
@@ -67,6 +67,13 @@ Measured with `tools/calibrate-bots.js` (30–44 games per pair). Ratings add up
 The searching bots use a fixed number of positions, not a fixed time, so they're equally strong on any device.
 These are ratings against each other; how they compare to people's ratings is a rough guess.
 
+## How the game rating works
+Game Review estimates the rating each side played at. One game's accuracy is a rough guide on its own, so the estimate is the
+rating that best explains three things together: the accuracy (compared with how accurately bots of each rating play), the result
+against an opponent of known strength (by the usual Elo odds – losing to a much stronger player says little, beating one says a lot),
+and the player's own established rating, when there is one. Measured on 310 bot games, the old accuracy-only formula was off by about
+590 points on average; the new estimate is off by about 200 when the player's rating is known, and about 515 from accuracy and result alone.
+
 ## Files
 - `public/` – the app (plain HTML/CSS/JS, no build step). Rules: `public/js/chess.js`. Engine: `public/js/engine.js`, run in a background thread by `engine-worker.js`.
 - `server.js` – serves the app and connects online players. `chess-server.js` – matchmaking, clocks, ratings; every move is checked with the same `chess.js` the app uses.
@@ -74,6 +81,8 @@ These are ratings against each other; how they compare to people's ratings is a 
 - `public/js/coach.js` – Coach Mira: how she judges and explains moves (tested in `test/coach.test.js`), and the coach in a game.
 - `public/js/botplay.js` – how each bot picks its moves. `tools/calibrate-bots.js` plays bots against each other to measure them:
   `node tools/calibrate-bots.js play hector yuki 40 out.json`, then `node tools/calibrate-bots.js report out.json`.
+- `tools/calibrate-review.js` – measures Game Review's game rating: bots play each other, every game is reviewed, and each side's accuracy is stored next to its real rating
+  (`node tools/calibrate-review.js play 100 out1.json 1`, several at once, then `node tools/calibrate-review.js fit out*.json` prints the table for `public/js/rating.js`).
 - `tools/make-puzzles.js` – makes the puzzles. Bots play each other, and when one blunders the engine checks that only one move wins.
   Run `node tools/make-puzzles.js <seed> <games> out.json` (several at once is faster), then `node tools/make-puzzles.js merge public/js/puzzles.js out*.json`.
 - `test/` – `npm test` runs the rules tests (perft move counts, SAN/PGN, draws, every opening line and puzzle), the engine tests, the coach tests, and an online test with two players

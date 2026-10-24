@@ -381,15 +381,27 @@
       this.record();
       if (this.mode === 'bot') Store.data.current = null;
       if (this.mode === 'bot' && won && !this.assisted) Store.data.beaten[this.bot.id] = true;
+      if (this.mode === 'bot' && !this.drill) this.rateBotGame(st);
       Store.save();
       this.draw();
       if (this.el) setTimeout(() => this.showResult(), 450);
+    }
+    /* your rating from bot games: Glicko-2 against the bots' measured ratings. Only fair games count – from the starting
+       position, at least one move each, and no takebacks, hints or coach. */
+    rateBotGame(st) {
+      if (st.reason === 'aborted' || this.game.history.length < 2) return;
+      if (this.assisted || this.game.startFen !== Chess.START_FEN) { this.botRated = { skipped: this.game.startFen !== Chess.START_FEN ? 'set-up position' : 'help' }; return; }
+      const R = Store.data.botRating, old = Math.round(R.r), score = st.winner === this.me ? 1 : st.winner ? 0 : 0.5;
+      // Titan's rating is an estimate, so it counts as less certain than the measured bots
+      const nr = Rating.update(R, { r: this.bot.rating, rd: this.bot.id === 'titan' ? 150 : 60, at: Date.now() }, score);
+      Store.data.botRating = nr; Store.logRating('bots', nr.r);
+      this.botRated = { old, now: Math.round(nr.r) };
     }
     record() {
       if (this.mode === 'watch' || this.mode === 'battle' || this.recorded) return;
       if (this.over.reason === 'aborted' && this.game.history.length < 2) return;
       this.recorded = true;
-      const pl = c => { const p = this.players[c] || {}; return { name: p.name, rating: p.rating, face: p.face, bot: p.isBot ? p.id : undefined }; };
+      const pl = c => { const p = this.players[c] || {}; return { name: p.name, rating: p.rating, provisional: p.provisional || undefined, face: p.face, bot: p.isBot ? p.id : undefined }; };
       const delta = this.ratingChange && this.me ? this.ratingChange[this.me].now - this.ratingChange[this.me].old : null;
       const pgn = this.serverPgn || this.game.pgn({ Event: this.title(), White: this.players.w.name, Black: this.players.b.name, Termination: this.over.reason });
       Store.addGame({ id: this.id, at: Date.now(), mode: this.mode, me: this.mode === 'local' ? null : this.me, white: pl('w'), black: pl('b'), result: this.over.result || this.game.status().result,
@@ -402,7 +414,10 @@
         return '<div class="rp' + (o.winner === c ? ' winner' : '') + '">' + UI.avatarHtml(p, 64) + '<div class="nm">' + esc(p.name) + '</div><div class="small muted">' +
           (rc && rc[c] ? rc[c].now + ' <span class="delta ' + (d >= 0 ? 'good' : 'bad') + '">' + (d >= 0 ? '+' : '') + d + '</span>' : p.rating != null ? p.rating : '') + '</div></div>'; };
       let extra = '';
-      if (this.mode === 'bot' && o.winner === this.me) extra = '<p class="center good"><b>' + (this.assisted ? 'Nice win! (Win without ' + (this.coached ? 'the coach, ' : '') + 'takebacks or hints to earn the badge.)' : 'You beat ' + esc(this.bot.name) + '! Badge earned.') + '</b></p>';
+      const br = this.mode === 'bot' && this.botRated;
+      if (br) extra += '<p class="center small muted" style="margin:6px 0">' + (br.skipped ? 'Bot rating unchanged – ' + (br.skipped === 'help' ? 'games with the coach, hints or takebacks don’t count.' : 'games from a set-up position don’t count.') :
+        'Bot rating <b style="color:var(--text)">' + br.now + '</b> <span class="delta ' + (br.now >= br.old ? 'good' : 'bad') + '">' + (br.now >= br.old ? '+' : '') + (br.now - br.old) + '</span>') + '</p>';
+      if (this.mode === 'bot' && o.winner === this.me) extra += '<p class="center good"><b>' + (this.assisted ? 'Nice win! (Win without ' + (this.coached ? 'the coach, ' : '') + 'takebacks or hints to earn the badge.)' : 'You beat ' + esc(this.bot.name) + '! Badge earned.') + '</b></p>';
       const s = sheet('<div class="result-head"><h2>' + esc(this.resultTitle()) + '</h2><div class="muted">' + esc(this.reasonText()) + '</div></div>' +
         '<div class="result-players">' + pl('w') + '<div class="vs">' + esc(o.result && o.result !== '*' ? o.result.replace('1/2-1/2', '½-½') : 'vs') + '</div>' + pl('b') + '</div>' + extra +
         '<div class="col gap">' + (this.game.history.length >= 2 ? '<button class="btn primary big" data-r="review">' + icon('review') + ' Game Review</button>' : '') +
@@ -561,7 +576,7 @@
       opts = opts || {};
       const mine = color === 'r' || !color ? (Math.random() < 0.5 ? 'w' : 'b') : color;
       engine('bot').stop(); engine('coach').stop();   // forget anything a previous game asked for
-      const you = Object.assign(me(), { rating: null });
+      const B = Store.data.botRating, you = Object.assign(me(), { rating: B.games && !Rating.provisional(B) ? Math.round(B.r) : null });   // your bot rating, once it's settled
       const ctl = new GameCtl({ mode: 'bot', me: mine, bot, startFen: opts.startFen, moves: opts.moves, players: mine === 'w' ? { w: you, b: bot } : { w: bot, b: you } });
       ctl.assisted = !!opts.assisted; ctl.coached = !!opts.coached;
       if (Coach.level(opts.coach) && !ctl.over) { ctl.coach = new Coach.Live(ctl, Coach.level(opts.coach)); ctl.assisted = ctl.coached = true; }

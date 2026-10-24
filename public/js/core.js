@@ -8,7 +8,7 @@
   const DEFAULT_SETTINGS = { board: 'grass', sound: true, dests: true, coords: true, lastMove: true, autoQueen: false, premoves: true, anim: 200, theme: 'dark', server: '', confirmResign: true, bigClock: false, evalBar: true, botChat: true, vibrate: true };
   function blank() {
     return { v: 1, profile: { token: randHex(24), name: '', face: Math.floor(Math.random() * 1e9), created: Date.now() }, settings: Object.assign({}, DEFAULT_SETTINGS),
-      puzzles: Object.assign(Rating.fresh(), { seen: {}, solved: 0, failed: 0, streak: 0, bestStreak: 0, log: [] }), rush: { best: 0, runs: 0 }, games: [], beaten: {},
+      puzzles: Object.assign(Rating.fresh(), { seen: {}, solved: 0, failed: 0, streak: 0, bestStreak: 0, log: [] }), rush: { best: 0, runs: 0 }, games: [], beaten: {}, botRating: Rating.fresh(),
       online: { id: '', ratings: {} }, lessons: {}, drills: {}, current: null };
   }
   let data;
