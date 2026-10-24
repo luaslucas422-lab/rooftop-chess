@@ -194,7 +194,8 @@
 
   /* ---------- bots ---------- */
   function bots(el, params) {
-    let sel = BOTS.find(b => b.id === Store.data.lastBot) || BOTS[1], color = Store.data.lastColor || 'r', coach = params.coach != null ? !!params.coach : Store.data.coachOn !== false;
+    let sel = BOTS.find(b => b.id === Store.data.lastBot) || BOTS[1], color = Store.data.lastColor || 'r', saved = Store.data.coachLevel || (Store.data.coachOn === false ? 'off' : 'normal'),
+      coach = params.coach ? (saved === 'off' ? 'beginner' : saved) : saved;   // off | beginner | normal | extreme
     const draw = () => {
       el.innerHTML = top('Play a bot') + '<div class="page" style="padding-top:4px">' +
         '<div class="card row gap" style="align-items:flex-start"><span class="av" style="width:72px;height:72px">' + sel.faceSvg + '</span><div class="grow"><h2 style="margin:0">' + esc(sel.name) + ' <span class="muted" style="font-size:16px">' + sel.rating + '</span></h2><p class="muted small" style="margin:4px 0 0">' + esc(sel.blurb) + '</p>' +
@@ -202,19 +203,27 @@
         (params.startFen ? '<p class="small muted" style="margin:10px 2px">Starting from the position you set up.</p>' : '') +
         '<div class="bot-grid" style="margin-top:12px">' + BOTS.map(b => '<button class="bot-card' + (b === sel ? ' on' : '') + '" data-bot="' + b.id + '">' + (Store.data.beaten[b.id] ? '<span class="won">✓</span>' : '') + '<span class="av" style="width:52px;height:52px">' + b.faceSvg + '</span><div class="nm">' + esc(b.name) + '</div><div class="rt">' + b.rating + '</div></button>').join('') + '</div>' +
         '<div class="tc-label">I play</div><div class="seg">' + [['w', 'White'], ['r', 'Random'], ['b', 'Black']].map(([k, n]) => '<button data-color="' + k + '" class="' + (color === k ? 'on' : '') + '">' + n + '</button>').join('') + '</div>' +
-        '<label class="card row gap" style="margin-top:14px"><span class="av" style="width:40px;height:40px">' + UI.face(Coach.FACE) + '</span><span class="grow"><b>Coach Mira</b><span class="small muted" style="display:block">Explains your moves, stops you on mistakes and warns you about threats</span></span>' +
-        '<span class="switch"><input type="checkbox" id="coach"' + (coach ? ' checked' : '') + '><span></span></span></label>' +
+        coachPick() +
         '<button class="btn primary big" style="margin-top:16px" data-a="play">Play ' + esc(sel.name) + '</button></div>';
     };
-    el.addEventListener('change', e => { if (e.target.id === 'coach') coach = e.target.checked; });
+    /* Coach Mira: off or one of her three levels (Extreme opens up after a few games) */
+    function coachPick() {
+      const ex = Coach.extremeOpen(), L = Coach.LEVELS[coach];
+      return '<div class="tc-label"><span class="av" style="width:22px;height:22px">' + UI.face(Coach.FACE) + '</span>Coach Mira</div><div class="seg coach-seg">' +
+        [['off', 'Off']].concat(Object.keys(Coach.LEVELS).map(k => [k, Coach.LEVELS[k].name])).map(([k, n]) =>
+          '<button data-coachlv="' + k + '" class="' + (coach === k ? 'on' : '') + (k === 'extreme' && !ex.open ? ' locked' : '') + '">' + (k === 'extreme' && !ex.open ? '🔒 ' : '') + n + '</button>').join('') + '</div>' +
+        '<p class="small muted" style="margin:8px 2px 0">' + (L ? esc(L.blurb) : 'No coach – just you and the bot.') + (ex.open ? '' : ' <span class="faint">Extreme unlocks after ' + Coach.UNLOCK + ' finished games (' + ex.left + ' to go).</span>') + '</p>';
+    }
     el.addEventListener('click', e => {
       const b = e.target.closest('[data-bot]'); if (b) { sel = BOTS.find(x => x.id === b.dataset.bot); return draw(); }
       const c = e.target.closest('[data-color]'); if (c) { color = c.dataset.color; return draw(); }
+      const lv = e.target.closest('[data-coachlv]');
+      if (lv) { if (lv.dataset.coachlv === 'extreme' && !Coach.extremeOpen().open) return toast('Finish ' + Coach.extremeOpen().left + ' more games to unlock Extreme coaching'); coach = lv.dataset.coachlv; return draw(); }
       if (e.target.closest('[data-a="play"]')) {
-        Store.data.lastBot = sel.id; Store.data.lastColor = color; Store.data.coachOn = coach; Store.save();
+        Store.data.lastBot = sel.id; Store.data.lastColor = color; Store.data.coachLevel = coach; Store.save();
         let mine = color;
         if (params.startFen) mine = color === 'r' ? new Chess.Game(params.startFen).turn : color;
-        Play.startBot(sel, mine, { startFen: params.startFen, coach });
+        Play.startBot(sel, mine, { startFen: params.startFen, coach: coach === 'off' ? null : coach });
       }
     });
     back(el); draw();

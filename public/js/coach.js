@@ -70,15 +70,16 @@
   }
 
   /* ---------- judging a move ---------- */
-  /* o: { color, uci (the move played), best (the engine's move), before (best line before the move), after (their best line after it), book }
+  /* o: { color, uci (the move played), best (the engine's move), before (best line before the move), after (their best line after it), book,
+     scale (how forgiving: 1 rates like Game Review, more is gentler, less is stricter) }
      returns { cls, loss (in win %), wpB, wpA } – cls as in Game Review: book, best, excellent, good, inaccuracy, mistake, miss, blunder */
   function grade(o) {
-    const c = o.color, wpB = winPct(cpFor(o.before, c)), wpA = winPct(cpFor(o.after, c));
+    const c = o.color, wpB = winPct(cpFor(o.before, c)), wpA = winPct(cpFor(o.after, c)), k = o.scale || 1;
     const loss = o.uci === o.best ? 0 : Math.max(0, wpB - wpA);
-    let cls = o.book ? 'book' : loss < 0.6 ? 'best' : loss < 2 ? 'excellent' : loss < 5 ? 'good' : loss < 10 ? 'inaccuracy' : loss < 20 ? 'mistake' : 'blunder';
+    let cls = o.book ? 'book' : loss < 0.6 * k ? 'best' : loss < 2 * k ? 'excellent' : loss < 5 * k ? 'good' : loss < 10 * k ? 'inaccuracy' : loss < 20 * k ? 'mistake' : 'blunder';
     const mB = mateFor(o.before, c), mA = mateFor(o.after, c);
-    if (mA < 0 && mB >= 0 && wpB >= 10) cls = 'blunder';                              // walking into a mate
-    else if (mB > 0 && mB <= 2 && !(mA > 0)) cls = loss >= 20 ? 'blunder' : 'miss';   // a short mate was there
+    if (mA < 0 && mB >= 0 && wpB >= 10) cls = 'blunder';                                  // walking into a mate
+    else if (mB > 0 && mB <= 2 && !(mA > 0)) cls = loss >= 20 * k ? 'blunder' : 'miss';   // a short mate was there
     return { cls, loss, wpB, wpA };
   }
 
@@ -218,13 +219,29 @@
 
   /* ---------- the coach in a game (browser only) ---------- */
   const FACE = { bg: '#2f6fd6', skin: 1, hair: 0, style: 1, eyes: 2, mouth: 0, acc: 1 };
-  const TIME = { eval: 700, threat: 300 };
+  /* how she coaches. scale: how forgiving the ratings are (see grade) · help: threat warnings, the bot's slips and tips on your turn
+     time: how long she looks at each position (ms). Every level stops the game on a mistake or worse – by that level's ratings. */
+  const LEVELS = {
+    beginner: { name: 'Beginner', scale: 1.5, help: true, time: 600, blurb: 'Rates your moves for a beginner: small slips are fine, and she stops you before big ones. Lots of warnings and tips.' },
+    normal: { name: 'Normal', scale: 1, help: true, time: 700, blurb: 'For when you’ve played a while. Rates moves like Game Review, stops you on mistakes, warns you about threats.' },
+    extreme: { name: 'Extreme', scale: 0.5, help: false, time: 1400, blurb: 'For good players. Strict ratings, a deeper look, and no warnings or tips – she only speaks up after your move.' },
+  };
+  const UNLOCK = 20;   // games to finish before Extreme opens up
+  const level = x => x === true ? 'normal' : LEVELS[x] ? x : null;
+  /* Extreme is earned: { open, left } (browser only) */
+  function extremeOpen() {
+    const d = Store.data;
+    if (!d.extremeOpen && d.games.filter(g => g.moves >= 10).length >= UNLOCK) { d.extremeOpen = true; Store.save(); }
+    return { open: !!d.extremeOpen, left: Math.max(0, UNLOCK - d.games.filter(g => g.moves >= 10).length) };
+  }
+  const TIME = { threat: 300 };
   const BAD = ['inaccuracy', 'mistake', 'miss', 'blunder'];
   const PRAISE = { best: ['is the best move.', 'is exactly right.', '– the best move!'], excellent: ['is excellent.', 'is a very good move.'], good: ['is a good move.', 'is a solid move.'] };
   let faceSvg = null;
 
   class Live {
-    constructor(ctl) {
+    constructor(ctl, lvl) {
+      this.level = level(lvl) || 'normal'; this.L = LEVELS[this.level];
       this.ctl = ctl; this.gen = 0; this.cache = new Map(); this.said = new Set();
       this.msg = ''; this.btns = []; this.tone = null; this.busy = 0;
       this.release = null;   // set while the game is stopped on a mistake
@@ -244,7 +261,7 @@
       const gv = UI.$('.gv', el); if (gv) gv.classList.toggle('coach-ask', this.btns.length > 0);
       for (const box of UI.$$('.coach-live', el)) {
         box.innerHTML = '<span class="av">' + faceSvg + '</span><div class="bubble"' + (this.tone ? ' style="border-color:' + this.tone + '"' : '') + '>' +
-          '<div class="coach-name">Coach Mira</div><div class="coach-msg">' + this.msg + '</div><div class="coach-btns">' + btns + '</div></div>';
+          '<div class="coach-name">Coach Mira · ' + this.L.name + '</div><div class="coach-msg">' + this.msg + '</div><div class="coach-btns">' + btns + '</div></div>';
         box.classList.toggle('busy', this.busy > 0);
       }
     }
@@ -258,7 +275,7 @@
       let e = this.cache.get(key);
       if (!e) {
         e = { v: undefined };
-        e.p = this.eng.request('think', { fen: g.startFen, moves: g.history.slice(0, ply).map(h => h.uci), time: TIME.eval }).then(r => {
+        e.p = this.eng.request('think', { fen: g.startFen, moves: g.history.slice(0, ply).map(h => h.uci), time: this.L.time }).then(r => {
           const v = r && r.best && r.lines && r.lines[0] ? { best: r.best, line: r.lines[0] } : null;
           if (v) e.v = v; else if (this.cache.get(key) === e) this.cache.delete(key);
           return v;
@@ -284,7 +301,10 @@
     /* ---------- the game ---------- */
     start() {
       const g = this.ctl.game;
-      this.say(g.history.length ? 'Welcome back! I’m watching your moves again.' : 'Hi, I’m Mira! I’ll check your moves and stop you if something goes wrong.');
+      const hi = { beginner: 'Hi, I’m Mira! Small slips are fine – I’ll stop you before the big ones and warn you about threats.',
+        normal: 'Hi, I’m Mira! I’ll check your moves and stop you if something goes wrong.',
+        extreme: 'Extreme coaching: strict ratings, and I stop you on any real mistake. No warnings from me – find them yourself.' };
+      this.say(g.history.length ? 'Welcome back! ' + this.L.name + ' coaching is on.' : hi[this.level]);
       this.yourTurn();
     }
     stop() { this.cancel(); this.free(); }
@@ -300,9 +320,9 @@
       this.setBusy(1);
       try {
         now = await this.analyze(ply);
-        if (!o.quiet && ply >= 2 && live()) th = await this.threatAt(ply);
+        if (!o.quiet && this.L.help && ply >= 2 && live()) th = await this.threatAt(ply);
       } finally { if (gen === this.gen) this.setBusy(-1); }
-      if (!live() || !now || o.quiet) return;
+      if (!live() || !now || o.quiet || !this.L.help) return;
       try {
         const c = ctl.me, them = ctl.bot.name, fen = this.fenAt(ply);
         let x = opportunity({ fen, color: c, them, now: now.line, prev: this.prev });
@@ -337,13 +357,13 @@
       const ctl = this.ctl, g = ctl.game, c = ctl.me, i = g.history.length - 1, sans = g.history.map(h => h.san);
       const standard = g.startFen === Chess.START_FEN;
       if (new Chess.Position(rec.fenBefore).legalMoves().length === 1) { this.say(b(rec.san) + ' was your only move.'); return false; }
-      const gr = grade({ color: c, uci: rec.uci, best: before.best, before: before.line, after: after.line, book: standard && i < 24 && Openings.isBook(sans, i) });
+      const gr = grade({ color: c, uci: rec.uci, best: before.best, before: before.line, after: after.line, book: standard && i < 24 && Openings.isBook(sans, i), scale: this.L.scale });
       let cls = gr.cls;
       if (!BAD.includes(cls)) {
         let text = this.badge(cls) + b(rec.san) + ' ';
         if (cls === 'book') text += 'is a book move.';
         else { const p = PRAISE[cls]; text = (offered && cls !== 'good' ? '<b>Well spotted!</b> ' : '') + text + p[i % p.length]; }
-        const tip = standard && openingTip({ history: g.history, color: c, said: this.said });
+        const tip = standard && this.L.help && openingTip({ history: g.history, color: c, said: this.said });
         if (tip) { this.said.add(tip.id); text += ' ' + tip.text; }
         this.say(text);
         return false;
@@ -351,7 +371,7 @@
       const why = explain({ fen: rec.fenBefore, move: rec, color: c, them: ctl.bot.name, before: before.line, after: after.line });
       if (why.kind === 'missedMate' || why.kind === 'missedWin') cls = 'miss';
       const name = Analysis.CLS[cls].name.toLowerCase(), head = this.badge(cls) + b(rec.san) + (cls === 'miss' ? ' misses a chance. ' : ' is ' + (cls === 'inaccuracy' ? 'an ' : 'a ') + name + '. ');
-      const stop = gr.loss >= 10 || why.kind === 'mate' || (why.kind === 'missedMate' && mateFor(before.line, c) <= 2);
+      const stop = gr.cls === 'mistake' || gr.cls === 'blunder' || why.kind === 'mate' || (why.kind === 'missedMate' && mateFor(before.line, c) <= 2);
       if (!stop) { this.say(head + why.text, { tone: Analysis.CLS[cls].color }); return false; }
       this.paused = { kind: why.kind, hint: why.hint, best: before.best, bestSan: before.line.san && before.line.san[0] };
       this.say(head + why.text, { tone: Analysis.CLS[cls].color, btns: [{ k: 'undo', label: 'Take it back', primary: true }, { k: 'show', label: 'Show me' }, { k: 'play', label: 'Play on' }] });
@@ -394,5 +414,5 @@
     }
   }
 
-  return { Live, FACE, grade, explain, threat, opportunity, openingTip, castleReminder, flipFen, lineGain, forkTargets, cpFor, mateFor, winPct };
+  return { Live, FACE, LEVELS, UNLOCK, level, extremeOpen, grade, explain, threat, opportunity, openingTip, castleReminder, flipFen, lineGain, forkTargets, cpFor, mateFor, winPct };
 });

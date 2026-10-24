@@ -43,6 +43,16 @@ assert.strictEqual(Coach.grade({ color: 'w', uci: 'e2e4', best: 'e2e4', before: 
 assert.strictEqual(Coach.grade({ color: 'w', uci: 'e2e4', best: 'd2d4', before: { score: 30 }, after: { score: 20 }, book: true }).cls, 'book');
 assert.strictEqual(Coach.grade({ color: 'b', uci: 'a7a6', best: 'e7e5', before: { score: 0 }, after: { score: 600 } }).cls, 'blunder');
 
+// the levels rate the same move differently: losing about 12% of your winning chances
+{ const o = { color: 'w', uci: 'a2a3', best: 'e2e4', before: { score: 0 }, after: { score: -135 } };
+  const at = lv => Coach.grade(Object.assign({ scale: Coach.LEVELS[lv].scale }, o)).cls;
+  assert.deepStrictEqual([at('beginner'), at('normal'), at('extreme')], ['inaccuracy', 'mistake', 'blunder']);
+  // a hung queen stops the game at every level, and walking into mate is always a blunder
+  for (const lv of Object.keys(Coach.LEVELS)) {
+    assert(['mistake', 'blunder'].includes(Coach.grade({ color: 'w', uci: 'e2e4', best: 'e2b5', before: { score: 800 }, after: { score: 0 }, scale: Coach.LEVELS[lv].scale }).cls), lv);
+    assert.strictEqual(Coach.grade({ color: 'w', uci: 'a1a7', best: 'h2h3', before: { score: 0 }, after: { score: 0, mate: -1 }, scale: Coach.LEVELS[lv].scale }).cls, 'blunder'); }
+  assert.strictEqual(Coach.level(true), 'normal'); assert.strictEqual(Coach.level('extreme'), 'extreme'); assert.strictEqual(Coach.level('off'), null); }
+
 // 1. leaving the queen where a pawn takes it
 { const { gr, why } = judge('7k/8/8/3p4/8/8/4Q3/4K3 w - - 0 1', 'e2e4', 'w');
   assert.strictEqual(gr.cls, 'blunder'); assert.strictEqual(why.kind, 'hangs'); has(why.text, 'queen on e4', 'dxe4');

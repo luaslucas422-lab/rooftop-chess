@@ -451,7 +451,7 @@
         }
         case 'newonline': return App.go('online', { tc: this.tcLabel().replace(' | ', '+'), auto: true });
         case 'again':
-          if (this.mode === 'bot') return Play.startBot(this.bot, this.me === 'w' ? 'b' : 'w', { coach: !!this.coach });
+          if (this.mode === 'bot') return Play.startBot(this.bot, this.me === 'w' ? 'b' : 'w', { coach: this.coach && this.coach.level });
           if (this.mode === 'local') return Play.startLocal({ tc: this.tc, flipEach: this.flipEach });
           if (this.mode === 'battle') return Play.startBattle(this.bots.w, this.bots.b);
           return App.go('home');
@@ -463,7 +463,7 @@
     menu() {
       const items = [];
       const it = (k, ic, label) => items.push('<button class="menu-item" data-m="' + k + '">' + icon(ic) + label + '</button>');
-      if (!this.over && this.mode === 'bot') { it('resign', 'flag', 'Resign'); it('draw', 'half', 'Offer a draw'); if (!this.drill) it('coach', 'hint', this.coach ? 'Turn the coach off' : 'Turn the coach on'); }
+      if (!this.over && this.mode === 'bot') { it('resign', 'flag', 'Resign'); it('draw', 'half', 'Offer a draw'); if (!this.drill) it('coach', 'hint', this.coach ? 'Coach: ' + this.coach.L.name : 'Coach: off'); }
       if (!this.over && this.mode === 'local') { it('resign', 'flag', (this.game.turn === 'w' ? 'White' : 'Black') + ' resigns'); it('draw', 'half', 'Agree to a draw'); it('autoflip', 'flip', (this.flipEach ? 'Stop' : 'Start') + ' turning the board each move'); }
       if (this.mode !== 'local') it('flip', 'flip', 'Flip board');
       if (this.over && this.game.history.length) it('review', 'review', 'Game Review');
@@ -483,7 +483,7 @@
         if (k === 'share') return navigator.share({ title: 'Rooftop Chess game', text: this.game.pgn({ White: this.players.w.name, Black: this.players.b.name }) }).catch(() => {});
         if (k === 'settings') return App.settingsSheet(() => this.applySettings());
         if (k === 'autoflip') { this.flipEach = !this.flipEach; if (this.flipEach) { this.orientation = this.game.turn; this.board.setOrientation(this.orientation); this.draw(false); } return; }
-        if (k === 'coach') return this.setCoach(!this.coach);
+        if (k === 'coach') return this.coachSheet();
         if (k === 'leave') { Net.send({ t: 'unwatch' }); Play.current = Play.player && Play.player !== this ? Play.player : null; return App.go('watch'); }
         if (k === 'home') return App.go('home');
         this.act(k);
@@ -497,17 +497,25 @@
     }
     save() {
       if (this.mode !== 'bot' || this.over) return;
-      Store.data.current = { mode: 'bot', bot: this.bot.id, me: this.me, startFen: this.game.startFen, moves: this.ucis, assisted: this.assisted, coach: !!this.coach, coached: this.coached, at: Date.now() };
+      Store.data.current = { mode: 'bot', bot: this.bot.id, me: this.me, startFen: this.game.startFen, moves: this.ucis, assisted: this.assisted, coach: this.coach ? this.coach.level : false, coached: this.coached, at: Date.now() };
       Store.save();
     }
-    /* Coach Mira on or off. Her help counts like hints: no "beaten" badge for a game she was in. */
-    setCoach(on) {
-      if (!on === !this.coach || this.mode !== 'bot') return;
-      if (on) { this.coach = new Coach.Live(this); this.assisted = true; this.coached = true; }
-      else { this.coach.stop(); this.coach = null; this.coachGate = null; }
+    /* Coach Mira at a level (beginner | normal | extreme) or off (null). Her help counts like hints: no "beaten" badge for a game she was in. */
+    setCoach(lvl) {
+      lvl = Coach.level(lvl);
+      if (lvl === (this.coach ? this.coach.level : null) || this.mode !== 'bot') return;
+      if (this.coach) { this.coach.stop(); this.coach = null; this.coachGate = null; }
+      if (lvl) { this.coach = new Coach.Live(this, lvl); this.assisted = true; this.coached = true; Store.data.coachLevel = lvl; }
       if (this.el) { const gv = $('.gv', this.el); gv.classList.toggle('with-coach', !!this.coach); gv.classList.remove('coach-ask'); for (const x of $$('.coach-live', this.el)) x.innerHTML = ''; this.drawBars(this.currentFen()); }
       if (this.coach) this.coach.start();
       this.save();
+    }
+    coachSheet() {
+      const cur = this.coach ? this.coach.level : 'off', ex = Coach.extremeOpen();
+      const row = (k, name, text, locked) => '<button class="menu-item' + (cur === k ? ' on' : '') + '" data-lv="' + k + '"' + (locked ? ' disabled' : '') + '><span class="grow"><b>' + name + (cur === k ? ' ✓' : '') + '</b><span class="small muted" style="display:block">' + text + '</span></span></button>';
+      const s = sheet('<h3>Coach Mira</h3>' + Object.keys(Coach.LEVELS).map(k => { const L = Coach.LEVELS[k], locked = k === 'extreme' && !ex.open;
+        return row(k, L.name + (locked ? ' 🔒' : ''), locked ? 'Finish ' + ex.left + ' more game' + (ex.left === 1 ? '' : 's') + ' to unlock. ' + L.blurb : L.blurb, locked); }).join('') + row('off', 'Off', 'Play on your own.'));
+      s.addEventListener('click', e => { const b = e.target.closest('[data-lv]'); if (!b || b.disabled) return; s.close(); this.setCoach(b.dataset.lv === 'off' ? null : b.dataset.lv); });
     }
     showChat(from, text) {
       if (!this.el) return;
@@ -532,7 +540,7 @@
       const you = Object.assign(me(), { rating: null });
       const ctl = new GameCtl({ mode: 'bot', me: mine, bot, startFen: opts.startFen, moves: opts.moves, players: mine === 'w' ? { w: you, b: bot } : { w: bot, b: you } });
       ctl.assisted = !!opts.assisted; ctl.coached = !!opts.coached;
-      if (opts.coach && !ctl.over) { ctl.coach = new Coach.Live(ctl); ctl.assisted = ctl.coached = true; }
+      if (Coach.level(opts.coach) && !ctl.over) { ctl.coach = new Coach.Live(ctl, Coach.level(opts.coach)); ctl.assisted = ctl.coached = true; }
       this.current = ctl;
       App.go('game');
       if (!opts.moves || !opts.moves.length) { Sound.play('start'); setTimeout(() => ctl.botSay('hello'), 400); }
