@@ -8,8 +8,8 @@
   const tcText = t => t.replace('+', ' | ');
   const catOf = t => { const [b, i] = t.split('+').map(Number); return Rating.category(b * 60, i); };
   const S = () => Store.data.settings;
-  const FULL = new Set(['game', 'puzzle', 'rush', 'analysis', 'review', 'lesson', 'drill', 'editor', 'drawpieces']);
-  const TAB_OF = { home: 'home', online: 'home', friend: 'home', bots: 'home', local: 'home', puzzles: 'puzzles', learn: 'learn', watch: 'watch', profile: 'profile', settings: 'profile', drawpieces: 'profile', leaders: 'profile', games: 'profile' };
+  const FULL = new Set(['game', 'puzzle', 'rush', 'analysis', 'review', 'lesson', 'drill', 'editor', 'drawpieces', 'multi', 'experimental']);
+  const TAB_OF = { home: 'home', online: 'home', friend: 'home', bots: 'home', local: 'home', puzzles: 'puzzles', learn: 'learn', watch: 'watch', profile: 'profile', settings: 'profile', drawpieces: 'profile', experimental: 'home', multi: 'home', leaders: 'profile', games: 'profile' };
   let cleanup = null, current = { route: 'home', params: {} }, installEvt = null, depth = 0;   // depth: how many screens back we can go inside the app
 
   /* ---------- navigation ---------- */
@@ -73,11 +73,12 @@
       '<button class="btn primary big" data-go="online">' + icon('globe') + ' Play Online</button>' +
       '<div class="row gap" style="margin-top:10px;font-size:13px"><span class="chip">Bullet ' + rr(R.bullet) + '</span><span class="chip">Blitz ' + rr(R.blitz) + '</span><span class="chip">Rapid ' + rr(R.rapid) + '</span></div></div>' +
       '<div class="tiles" style="margin-top:12px">' +
-      '<button class="tile" data-go="bots"><span class="ic" style="background:#7aa7f022;color:#7aa7f0">' + icon('robot') + '</span><span><b>Play a bot</b><small>12 characters, 250 to 2800</small></span></button>' +
+      '<button class="tile" data-go="bots"><span class="ic" style="background:#7aa7f022;color:#7aa7f0">' + icon('robot') + '</span><span><b>Play a bot</b><small>13 characters, 250 to 3500</small></span></button>' +
       '<button class="tile" data-go="friend"><span class="ic" style="background:#6cc4a122;color:#6cc4a1">' + icon('friend') + '</span><span><b>Play a friend</b><small>Send a code or link</small></span></button>' +
       '<button class="tile" data-go="local"><span class="ic" style="background:#e27fa722;color:#e27fa7">' + icon('flip') + '</span><span><b>Pass & play</b><small>Two players, one phone</small></span></button>' +
       '<button class="tile" data-go="analysis"><span class="ic" style="background:#f2cc5b22;color:#f2cc5b">' + icon('chart') + '</span><span><b>Analysis</b><small>Engine, PGN & FEN</small></span></button>' +
       '</div>' +
+      '<button class="card row gap exp-card" data-go="experimental"><span class="mini-cross">' + expIcon() + '</span><span class="grow"><b>Experimental</b><span class="small muted" style="display:block">3- and 4-player chess</span></span><span class="chip acc">New</span></button>' +
       '<div class="section-title">Daily puzzle</div><button class="card row gap" data-a="daily" style="width:100%;border:0;text-align:left;color:inherit"><div class="db" style="width:104px;flex-shrink:0"></div><div class="grow"><b>' + (Store.data.dailyDone === Puzzles.dayNumber() ? 'Solved today ✓' : 'Today’s puzzle') + '</b><div class="small muted">' + (d ? (new Chess.Game(d.fen).turn === 'w' ? 'Black' : 'White') + ' to move · rated ' + d.rating : '') + '</div><div class="small" style="margin-top:6px;color:var(--accent);font-weight:700">Solve it →</div></div></button>' +
       '<div class="section-title">Recent games</div>' + (recent.length ? '<div class="list">' + recent.map(gameItem).join('') + '</div><button class="btn ghost block" style="margin-top:10px" data-go="games">All games</button>' : '<div class="card empty">Your games will show up here.</div>') +
       '</div>';
@@ -214,6 +215,12 @@
     return () => { offs.forEach(f => f()); if (code) Net.raw({ t: 'cancelChallenge' }); };
   }
 
+  /* the cross-shaped 4-player board in four colors, for the Experimental card */
+  function expIcon() {
+    let s = '<svg viewBox="0 0 14 14">';
+    for (let y = 0; y < 14; y++) for (let x = 0; x < 14; x++) if (Multi.ok(x, y)) { const o = y >= 11 ? 0 : x <= 2 ? 1 : y <= 2 ? 2 : x >= 11 ? 3 : -1; s += '<rect x="' + x + '" y="' + y + '" width="1" height="1" fill="' + (o >= 0 ? Multi.COLORS[o] : (x + y) % 2 ? 'var(--dark)' : 'var(--light)') + '"/>'; }
+    return s + '</svg>';
+  }
   /* ---------- bots ---------- */
   function bots(el, params) {
     let sel = findBot(Store.data.lastBot) || BOTS[1], color = Store.data.lastColor || 'r', saved = Store.data.coachLevel || (Store.data.coachOn === false ? 'off' : 'normal'),
@@ -429,7 +436,7 @@
   }
 
   /* ---------- settings ---------- */
-  const BOARDS = [['grass', 'Grass', '#eeeed2', '#769656'], ['walnut', 'Walnut', '#f0d9b5', '#b58863'], ['ocean', 'Ocean', '#dee3e6', '#8ca2ad'], ['dusk', 'Dusk', '#e8e2f3', '#8f7bb5'], ['sunset', 'Sunset', '#f7e4c9', '#d18b55'], ['slate', 'Slate', '#c9ced6', '#6b7686']];
+  const BOARDS = [['grass', 'Grass', '#eeeed2', '#769656'], ['walnut', 'Walnut', '#f0d9b5', '#b58863'], ['ocean', 'Ocean', '#dee3e6', '#8ca2ad'], ['dusk', 'Dusk', '#e8e2f3', '#8f7bb5'], ['sunset', 'Sunset', '#f7e4c9', '#d18b55'], ['slate', 'Slate', '#c9ced6', '#6b7686'], ['mint', 'Mint', '#e3f4ea', '#5fa889'], ['coral', 'Coral', '#fbe6da', '#e07a5f'], ['night', 'Night', '#a8b8d0', '#3e4a61'], ['candy', 'Candy', '#fde4f0', '#d77fa1'], ['sand', 'Sand', '#f4ead2', '#c2a46b']];
   const TOGGLES = [['sound', 'Sounds'], ['vibrate', 'Vibrate on moves'], ['dests', 'Show legal moves'], ['coords', 'Board coordinates'], ['lastMove', 'Highlight the last move'], ['autoQueen', 'Always promote to a queen'], ['premoves', 'Premoves in online games'], ['botChat', 'Bots talk during games'], ['confirmResign', 'Ask before resigning'], ['bigClock', 'Big clock']];
   function settingsHtml(full) {
     const s = S();
@@ -542,6 +549,7 @@
     learn: el => Learn.screenLearn(el), lesson: (el, p) => Learn.screenLesson(el, p), drill: (el, p) => Learn.screenDrill(el, p),
     analysis: (el, p) => Analysis.screenAnalysis(el, p), review: (el, p) => Analysis.screenReview(el, p), editor: (el, p) => Analysis.screenEditor(el, p),
     drawpieces: (el, p) => PieceEditor.screen(el, p),
+    experimental: el => MultiUI.screenSetup(el), multi: (el, p) => MultiUI.screenGame(el, p),
   };
 
   /* ---------- start ---------- */

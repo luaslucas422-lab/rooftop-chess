@@ -26,6 +26,16 @@
       b: '<style>*{fill:#22081d;stroke:#ff4fd1;stroke-width:3.6;stroke-linejoin:round;stroke-linecap:round}.d{stroke:#ff4fd1;stroke-width:2.4}.e{fill:#ff4fd1;stroke:none}</style>' },
     ink: { w: '<style>*{fill:#fff;stroke:#111;stroke-width:4.2;stroke-linejoin:round;stroke-linecap:round}.d{stroke:#111;stroke-width:3}.e{fill:#111;stroke:none}</style>',
       b: '<style>*{fill:#111;stroke:#111;stroke-width:4.2;stroke-linejoin:round;stroke-linecap:round}.d{stroke:#fff;stroke-width:3}.e{fill:#fff;stroke:none}</style>' },
+    wood: { w: '<style>*{fill:#ecc995;stroke:#5a3a1a;stroke-width:3.2;stroke-linejoin:round;stroke-linecap:round}.d{stroke:#8a5a2b;stroke-width:2.4}.e{fill:#5a3a1a;stroke:none}</style>',
+      b: '<style>*{fill:#7a4520;stroke:#2b170a;stroke-width:3.2;stroke-linejoin:round;stroke-linecap:round}.d{stroke:#d4a373;stroke-width:2.4}.e{fill:#f0d3a6;stroke:none}</style>' },
+    ice: { w: '<style>*{fill:#f2fbff;stroke:#2f6f99;stroke-width:3.2;stroke-linejoin:round;stroke-linecap:round}.d{stroke:#6fb3d9;stroke-width:2.4}.e{fill:#2f6f99;stroke:none}</style>',
+      b: '<style>*{fill:#1d4f7c;stroke:#0a2742;stroke-width:3.2;stroke-linejoin:round;stroke-linecap:round}.d{stroke:#9fd4f5;stroke-width:2.4}.e{fill:#d5f1ff;stroke:none}</style>' },
+    candy: { w: '<style>*{fill:#ffe0ee;stroke:#c2185b;stroke-width:3.2;stroke-linejoin:round;stroke-linecap:round}.d{stroke:#e85d9a;stroke-width:2.4}.e{fill:#c2185b;stroke:none}</style>',
+      b: '<style>*{fill:#6a1b9a;stroke:#2e0a45;stroke-width:3.2;stroke-linejoin:round;stroke-linecap:round}.d{stroke:#e1bee7;stroke-width:2.4}.e{fill:#f3e5f5;stroke:none}</style>' },
+    metal: { w: '<style>*{fill:#eceff1;stroke:#546e7a;stroke-width:3.2;stroke-linejoin:round;stroke-linecap:round}.d{stroke:#90a4ae;stroke-width:2.4}.e{fill:#37474f;stroke:none}</style>',
+      b: '<style>*{fill:#c99a1e;stroke:#5c4300;stroke-width:3.2;stroke-linejoin:round;stroke-linecap:round}.d{stroke:#7a5a00;stroke-width:2.4}.e{fill:#3d2c00;stroke:none}</style>' },
+    shadow: { w: '<style>*{fill:#f6f6f6;stroke:#3b3b3b;stroke-width:3.2;stroke-linejoin:round;stroke-linecap:round}.d{stroke:#3b3b3b;stroke-width:2.4}.e{fill:#3b3b3b;stroke:none}.d,.e{display:none}</style>',
+      b: '<style>*{fill:#141414;stroke:#141414;stroke-width:3.2;stroke-linejoin:round;stroke-linecap:round}.d{stroke:#141414;stroke-width:2.4}.e{fill:#141414;stroke:none}.d,.e{display:none}</style>' },
   };
   /* Pixel: 12×12 sprites; the outline is worked out around the filled cells */
   const SPRITES = {
@@ -58,7 +68,7 @@
     const d = strokes.map(p => { let s = ''; for (let i = 0; i + 1 < p.length; i += 2) s += (i ? 'L' : 'M') + (+p[i]).toFixed(1) + ' ' + (+p[i + 1]).toFixed(1); return p.length === 2 ? s + 'l.1 0' : s; }).join('');
     return '<path d="' + d + '" fill="none" stroke="' + edge + '" stroke-width="' + (w + 5) + '" stroke-linecap="round" stroke-linejoin="round"/><path d="' + d + '" fill="none" stroke="' + main + '" stroke-width="' + w + '" stroke-linecap="round" stroke-linejoin="round"/>';
   }
-  const STYLES = [['classic', 'Classic'], ['royal', 'Royal'], ['neon', 'Neon'], ['ink', 'Ink'], ['pixel', 'Pixel'], ['letters', 'Letters']];
+  const STYLES = [['classic', 'Classic'], ['royal', 'Royal'], ['neon', 'Neon'], ['ink', 'Ink'], ['wood', 'Wood'], ['ice', 'Ice'], ['candy', 'Candy'], ['metal', 'Metal'], ['shadow', 'Shadow'], ['pixel', 'Pixel'], ['letters', 'Letters']];
   const wrap = body => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' + body + '</svg>';
   /* a piece in any style. set: one of your drawn sets (when style is its id) */
   function svgIn(code, style, set) {

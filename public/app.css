@@ -20,6 +20,11 @@
 [data-board="dusk"] { --light: #e8e2f3; --dark: #8f7bb5; }
 [data-board="sunset"] { --light: #f7e4c9; --dark: #d18b55; }
 [data-board="slate"] { --light: #c9ced6; --dark: #6b7686; }
+[data-board="mint"] { --light: #e3f4ea; --dark: #5fa889; }
+[data-board="coral"] { --light: #fbe6da; --dark: #e07a5f; }
+[data-board="night"] { --light: #a8b8d0; --dark: #3e4a61; }
+[data-board="candy"] { --light: #fde4f0; --dark: #d77fa1; }
+[data-board="sand"] { --light: #f4ead2; --dark: #c2a46b; }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); }
@@ -374,3 +379,30 @@ button.title-badge { cursor: pointer; }
 .disclaimer { margin: 8px 0 0; padding: 7px 10px; border-radius: 10px; background: var(--card2); font-size: 12.5px; color: var(--muted); border-left: 3px solid #c7301f; }
 .clock-grid { grid-template-columns: repeat(4, 1fr); }
 .clock-grid button small { display: block; font-size: 10.5px; color: var(--muted); font-weight: 700; text-transform: capitalize; }
+
+/* ---------- experimental: 3- and 4-player chess ---------- */
+.exp-card { width: 100%; border: 0; text-align: left; color: inherit; margin-top: 12px; }
+.mini-cross { width: 44px; height: 44px; flex-shrink: 0; display: block; }
+.mini-cross svg { width: 100%; height: 100%; display: block; }
+.mode-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mode-card { border: 2px solid transparent; background: var(--card); border-radius: var(--radius); padding: 12px; text-align: left; color: inherit; display: flex; flex-direction: column; gap: 4px; }
+.mode-card.on { border-color: var(--accent); }
+.mode-card .mini-cross { width: 64px; height: 64px; margin-bottom: 4px; }
+.mode-card small { color: var(--muted); font-size: 12.5px; line-height: 1.3; }
+.multi { display: flex; flex-direction: column; height: 100%; }
+.mseats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 4px 8px; }
+.seat { display: flex; align-items: center; gap: 6px; background: var(--card); border-radius: 10px; padding: 6px 8px; font-size: 13.5px; font-weight: 700; border: 2px solid transparent; flex-wrap: wrap; }
+.seat i { width: 12px; height: 12px; border-radius: 50%; background: var(--c); flex-shrink: 0; }
+.seat.turn { border-color: var(--c); }
+.seat.out { opacity: .45; }
+.seat small { width: 100%; font-size: 11px; color: var(--muted); font-weight: 600; margin-left: 18px; }
+.mboard-wrap { display: flex; justify-content: center; padding: 4px; }
+.mboard { --mw: min(100vw - 8px, 100dvh - 230px - var(--safeT) - var(--safeB), 640px); width: var(--mw); height: var(--mw); display: grid; grid-template-columns: repeat(14, 1fr); grid-template-rows: repeat(14, 1fr); user-select: none; -webkit-user-select: none; }
+.mc { background-size: 88%; background-position: center; background-repeat: no-repeat; position: relative; cursor: pointer; }
+.mc.lt { background-color: var(--light); } .mc.dk { background-color: var(--dark); } .mc.off { background: transparent; cursor: default; }
+.mc.last { box-shadow: inset 0 0 0 100px var(--lastL); }
+.mc.sel { box-shadow: inset 0 0 0 100px rgba(255, 210, 60, .55); }
+.mc.chk { box-shadow: inset 0 0 0 100px rgba(235, 60, 50, .55); }
+.mc.dest::after { content: ''; position: absolute; left: 36%; top: 36%; width: 28%; height: 28%; border-radius: 50%; background: rgba(20, 20, 20, .28); }
+.mc.cap::after { left: 6%; top: 6%; width: 88%; height: 88%; background: none; border: 3px solid rgba(20, 20, 20, .3); box-sizing: border-box; }
+.mstatus { display: flex; gap: 8px; align-items: center; justify-content: center; flex-wrap: wrap; padding: 8px 12px calc(10px + var(--safeB)); font-weight: 700; text-align: center; min-height: 44px; }

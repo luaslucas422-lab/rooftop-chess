@@ -44,7 +44,8 @@ to a Postgres database and ratings are stored there too. Note that Render's free
 - **Analysis board** – engine with the top 3 lines and an eval bar, known opening moves, a position editor, and PGN/FEN import and export. On a computer, right-click to draw arrows.
 - **Learn** – "how the pieces move" lessons, checkmate drills against the engine, and the rules.
 - **Watch** – spectate live games, or set two bots against each other.
-- **Settings** – board colors, and **piece styles**: Classic, Royal, Neon, Ink, Pixel and Letters, or draw your own set (one drawing per piece, white and black colored for you) and give it a name.
+- **Experimental** – 3- and 4-player chess on a cross-shaped board, against bots (easy, normal, hard) or passing the phone round. Pieces move as in chess, pawns become queens in the middle, a player with no legal move is out, and the last king standing wins (rules in `public/js/multi.js`).
+- **Settings** – board colors, and **piece styles**: Classic, Royal, Neon, Ink, Wood, Ice, Candy, Metal, Shadow, Pixel and Letters, or draw your own set (one drawing per piece, white and black colored for you) and give it a name.
 - **Me** – your picture (a drawn face, or a photo that stays on your phone – other players online see your drawn face), ratings and a rating graph, every game you've played (review, analyse, or copy them all as PGN), bots beaten, settings (6 board colors, light/dark, sounds, vibration…).
 
 ## How strong the bots are

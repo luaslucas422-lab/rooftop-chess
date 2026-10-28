@@ -102,6 +102,14 @@ async function move(p, from, to) { await tap(p, from); await wait(60); await tap
   await a.evaluate(() => { Store.data.settings.pieces = PIECES.use('classic'); });
   console.log('bot clock, Trying Pip, piece styles ok');
 
+  // Experimental: 4-player chess against bots – you move, the three bots answer
+  await a.evaluate(() => App.go('multi', { players: 4, who: 'bots', level: 'easy' }));
+  await a.waitForSelector('.mboard [data-s]');
+  await a.click('.mboard [data-s="' + (12 * 14 + 6) + '"]'); await a.click('.mboard [data-s="' + (10 * 14 + 6) + '"]');
+  await a.waitForFunction(() => Multi.current.state.plies >= 4 && Multi.current.state.turn === 0, null, { timeout: 15000 });
+  await a.evaluate(() => App.go('home'));
+  console.log('4-player chess ok');
+
   // a rated puzzle, solved with its own solution
   await a.evaluate(() => App.go('puzzle', { mode: 'rated' }));
   await a.waitForFunction(() => Puzzles.active && Puzzles.active.step === 1, null, { timeout: 10000 });
