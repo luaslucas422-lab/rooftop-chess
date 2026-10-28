@@ -77,6 +77,8 @@
     setOrientation(c) { if (c !== this.orientation) { this.orientation = c; this.layout(); } }
     flip() { this.setOrientation(this.orientation === 'w' ? 'b' : 'w'); }
     setCoords(on) { this.o.coords = on; this.layout(); }
+    /* the piece style changed: repaint the pieces on the board */
+    restyle() { for (const el of this.pcLayer.children) if (el.dataset.code) el.style.backgroundImage = 'url("' + root.PIECES.url(el.dataset.code) + '")'; }
 
     /* new position. opts: { fen, lastMove: [from, to], check: square, movable, turn, dests: Map, animate } */
     set(opts) {

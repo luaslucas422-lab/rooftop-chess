@@ -43,6 +43,11 @@
     return h;
   }
   const otherC = c => c === 'w' ? 'b' : 'w';
+  /* a bot's level with its thinking time cut to fit its clock (bots that search a fixed amount are quick anyway) */
+  function withTime(L, ms) {
+    if (L.mix) return Object.assign({}, L, { mix: Object.assign({}, L.mix, { lo: withTime(L.mix.lo, ms), hi: withTime(L.mix.hi, ms) }) });
+    return L.time ? Object.assign({}, L, { time: Math.round(Math.min(L.time, ms)) }) : L;
+  }
 
   class GameCtl {
     /* opts: { mode, me, players: { w, b }, startFen, moves, tc: { base, inc } | null, bot, id, rated, cat, flipEach } */
@@ -63,6 +68,7 @@
       this.premove = null; this.hintMove = null; this.assisted = false;
       this.coach = null; this.coachGate = null; this.coached = false;   // Coach Mira (bot games)
       // online games set up with move ratings and/or takebacks (both players chose them when they queued)
+      this.shared = !!o.shared;   // online: one clock for both players
       this.takebacks = o.takebacks || 0; this.tbLeft = o.takebacksLeft || { w: 0, b: 0 };   // takebacks each: 3, 10 or -1 (any number); left for each side
       this.rater = o.ratings ? new Coach.Rater(this) : null;
       this.offs = [];
@@ -76,8 +82,27 @@
     clocksNow() {
       if (!this.clock) return null;
       const c = this.clock.slice();
-      if (this.running && !this.over) { const i = this.game.turn === 'w' ? 0 : 1; c[i] = Math.max(0, c[i] - (performance.now() - this.clockAt)); }
+      if (this.running && !this.over && !this.held) {
+        const i = this.game.turn === 'w' ? 0 : 1, used = performance.now() - this.clockAt;
+        if (this.shared) { c[0] = c[1] = Math.max(0, c[i] - used); } else c[i] = Math.max(0, c[i] - used);   // shared: one clock for both
+      }
       return c;
+    }
+    /* bot games: stop the clock while the coach has the game on hold (nobody is thinking then), and start it again */
+    hold(on) {
+      if (!this.clock || !!on === !!this.held) return;
+      const t = performance.now();
+      if (on && this.running && !this.over) { const i = this.game.turn === 'w' ? 0 : 1; this.clock[i] = Math.max(0, this.clock[i] - (t - this.clockAt)); }
+      this.held = !!on; this.clockAt = t;
+    }
+    /* has the side to move run out of time? (then the game ends on time) */
+    flagged() {
+      if (!this.clock || !this.running || this.over || (this.mode !== 'local' && this.mode !== 'bot')) return false;
+      const c = this.clocksNow(), i = this.game.turn === 'w' ? 0 : 1;
+      if (c[i] > 0) return false;
+      this.clock = c; const winner = this.game.timeoutResult(this.game.turn);
+      this.end(this.game.finish(winner, winner ? 'timeout' : 'timeout vs insufficient material'));
+      return true;
     }
 
     /* ---------- screen ---------- */
@@ -148,11 +173,11 @@
       const b = $('.badge', this.el); if (b && C) b.style.background = C.color;
     }
     title() {
-      if (this.mode === 'bot') return 'vs ' + this.bot.name + ' (' + this.bot.rating + ')';
+      if (this.mode === 'bot') return 'vs ' + this.bot.name + ' (' + this.bot.rating + ')' + (this.tc ? ' · ' + this.tcLabel() : '');
       if (this.mode === 'local') return 'Pass & play' + (this.tc ? ' · ' + this.tcLabel() : '');
       if (this.mode === 'watch') return 'Watching · ' + this.tcLabel();
       if (this.mode === 'battle') return 'Bot battle: ' + this.bots.w.name + ' vs ' + this.bots.b.name;
-      return (this.rated ? 'Rated ' : 'Casual ') + (this.cat || '') + ' · ' + this.tcLabel();
+      return (this.rated ? 'Rated ' : 'Casual ') + (this.cat || '') + ' · ' + this.tcLabel() + (this.shared ? ' · shared clock' : '');
     }
     tcLabel() { return this.tc ? this.tc.base / 60000 + ' | ' + this.tc.inc / 1000 : ''; }
 
@@ -166,7 +191,7 @@
         const thinking = this.thinking && !waiting && ((this.mode === 'bot' && c !== this.me) || (this.mode === 'battle' && c === this.game.turn)) ? '<span class="thinking"><i></i><i></i><i></i></span>' : '';
         const diff = c === 'w' ? mat.diff : -mat.diff;
         const acc = this.rater ? this.rater.accuracy()[c] : null;
-        bar.innerHTML = UI.avatarHtml(p, 36) + '<div class="who"><div class="nm"><span class="ellipsis">' + esc(p.name) + '</span>' + rating + dot + thinking + '</div><div class="caps">' + capsHtml(mat[c], diff) + '</div></div>' +
+        bar.innerHTML = UI.avatarHtml(p, 36) + '<div class="who"><div class="nm">' + (p.title ? '<button class="title-badge" data-act="title" aria-label="About this title">' + esc(p.title) + '</button>' : '') + '<span class="ellipsis">' + esc(p.name) + '</span>' + rating + dot + thinking + '</div><div class="caps">' + capsHtml(mat[c], diff) + '</div></div>' +
           (acc != null ? '<span class="chip" title="Accuracy">' + acc.toFixed(0) + '%</span>' : '') +
           (this.clock ? '<div class="clock" data-clock="' + c + '"></div>' : '');
       }
@@ -182,13 +207,10 @@
         const on = !this.over && this.game.turn === k && (this.running || this.game.history.length < 2);
         el.classList.toggle('on', on); el.classList.toggle('low', ms < 20000);
       }
-      if (this.running && !this.over && (this.mode === 'local')) {
-        const i = this.game.turn === 'w' ? 0 : 1;
-        if (c[i] <= 0) { this.clock = c; const winner = this.game.timeoutResult(this.game.turn); this.end(this.game.finish(winner, winner ? 'timeout' : 'timeout vs insufficient material')); }
-      }
+      this.flagged();
       if (this.mode === 'online' && !this.over && this.game.history.length < 2 && (force || Math.floor(performance.now() / 1000) !== this.lastStatusSec)) { this.lastStatusSec = Math.floor(performance.now() / 1000); this.drawStatus(); }
       // a soft tick when you're low on time
-      if (this.mode === 'online' && this.running && !this.over && this.game.turn === this.me) {
+      if ((this.mode === 'online' || this.mode === 'bot') && this.running && !this.over && !this.held && this.game.turn === this.me) {
         const ms = c[this.me === 'w' ? 0 : 1], s = Math.ceil(ms / 1000);
         if (s <= 10 && s !== this.lastTick) { this.lastTick = s; Sound.play('tick'); }
       }
@@ -270,6 +292,7 @@
     userMove(from, to, promo) {
       if (this.over || this.view != null && this.view < this.game.history.length) return false;
       if (!this.myTurn() || this.thinking) return false;
+      if (this.flagged()) return false;
       const rec = this.game.move({ from, to, promo: promo || 'q' });
       if (!rec) { Sound.play('illegal'); return false; }
       this.afterMove(rec, true);
@@ -280,7 +303,7 @@
       Sound.forMove(rec);
       if (this.mode === 'bot') this.botReacts(rec);
       if (this.mode !== 'battle') Sound.buzz(rec);
-      if (this.clock && this.mode === 'local') {
+      if (this.clock && (this.mode === 'local' || this.mode === 'bot')) {
         const n = this.game.history.length, i = rec.color === 'w' ? 0 : 1, t = performance.now();
         if (this.running) this.clock[i] = Math.max(0, this.clock[i] - (t - this.clockAt)) + this.tc.inc;
         this.clockAt = t; if (n >= 2) this.running = true;
@@ -316,15 +339,19 @@
       const token = ++this.token;
       this.thinking = true; this.drawActions(); this.drawBars(this.game.fen());
       const t0 = performance.now();
-      const L = (this.mode === 'battle' ? this.bots[this.game.turn] : this.bot).level;
+      let L = (this.mode === 'battle' ? this.bots[this.game.turn] : this.bot).level;
+      // with a clock, a bot spends about a twenty-fifth of what it has left (plus most of the increment) on a move
+      const left = this.clock ? this.clocksNow()[this.game.turn === 'w' ? 0 : 1] : Infinity, budget = this.clock ? Math.max(150, left / 25 + this.tc.inc * 0.8) : Infinity;
+      if (this.clock) L = withTime(L, budget);
       const res = await engine('bot').request('bot', { fen: this.game.startFen, moves: this.ucis, sans: this.sans, level: L });
       if (token !== this.token || this.over) return;
-      // people take a moment to move – the weaker bots don't snap back instantly either
-      const want = L.time ? 250 : 400 + Math.random() * 800;
+      // people take a moment to move – the weaker bots don't snap back instantly either (less so when the clock is short)
+      const want = Math.min(L.time ? 250 : 400 + Math.random() * 800, budget / 2);
       const wait = Math.max(0, want - (performance.now() - t0));
       await new Promise(r => setTimeout(r, wait));
       if (token !== this.token || this.over) return;
-      if (this.coachGate) { const gate = this.coachGate; this.coachGate = null; await gate; if (token !== this.token || this.over) return; }
+      if (this.coachGate) { const gate = this.coachGate; this.coachGate = null; this.hold(true); await gate; this.hold(false); if (token !== this.token || this.over) return; }
+      if (this.flagged()) return;
       this.thinking = false;
       const rec = res && res.best && this.game.move(res.best);
       if (!rec) { this.drawActions(); return; }
@@ -392,9 +419,9 @@
       if (st.reason === 'aborted' || this.game.history.length < 2) return;
       if (this.assisted || this.game.startFen !== Chess.START_FEN) { this.botRated = { skipped: this.game.startFen !== Chess.START_FEN ? 'set-up position' : 'help' }; return; }
       const R = Store.data.botRating, old = Math.round(R.r), score = st.winner === this.me ? 1 : st.winner ? 0 : 0.5;
-      // Titan's rating is an estimate, so it counts as less certain than the measured bots; your own bots are in between,
-      // except above Titan, where nothing has been measured
-      const rd = this.bot.mine ? (this.bot.rating > 2800 ? 200 : 90) : this.bot.id === 'titan' ? 150 : 60;
+      // Titan's rating is an estimate, so it counts as less certain than the measured bots; your own bots are in between;
+      // above Titan nothing has been measured (Trying Pip, your bots up there)
+      const rd = this.bot.rating > 2800 ? 200 : this.bot.mine ? 90 : this.bot.id === 'titan' ? 150 : 60;
       const nr = Rating.update(R, { r: this.bot.rating, rd, at: Date.now() }, score);
       Store.data.botRating = nr; Store.logRating('bots', nr.r);
       this.botRated = { old, now: Math.round(nr.r) };
@@ -439,6 +466,7 @@
         case 'live': this.view = null; return this.draw();
         case 'flip': this.orientation = otherC(this.orientation); this.board.setOrientation(this.orientation); return this.drawBars(this.currentFen());
         case 'menu': return this.menu();
+        case 'title': return sheet('<h3>About the GM title</h3><p>' + esc(TITLE_NOTE) + '</p><p class="small muted">It’s part of the bot’s name, for fun.</p>', { center: true });
         case 'hint': {
           if (!this.myTurn()) return;
           this.assisted = true;
@@ -456,8 +484,10 @@
           }
           if (!n) return;
           this.token++; this.thinking = false; this.coachGate = null; engine('bot').stop();
+          this.hold(true);   // whoever was thinking pays for that time; the clock starts again from here
           if (this.mode === 'bot') { this.assisted = true; g.undo(); if (g.turn !== this.me && g.history.length) g.undo(); }
           else g.undo();
+          this.hold(false);
           this.over = null; this.ended = false; this.view = null; this.hintMove = null;
           if (this.coach) this.coach.takenBack();
           this.draw(); this.save();
@@ -492,7 +522,7 @@
         }
         case 'newonline': return App.go('online', { tc: this.tcLabel().replace(' | ', '+'), auto: true });
         case 'again':
-          if (this.mode === 'bot') return Play.startBot(this.bot, this.me === 'w' ? 'b' : 'w', { coach: this.coach && this.coach.level });
+          if (this.mode === 'bot') return Play.startBot(this.bot, this.me === 'w' ? 'b' : 'w', { coach: this.coach && this.coach.level, tc: this.tc });
           if (this.mode === 'local') return Play.startLocal({ tc: this.tc, flipEach: this.flipEach });
           if (this.mode === 'battle') return Play.startBattle(this.bots.w, this.bots.b);
           return App.go('home');
@@ -534,11 +564,11 @@
       if (!this.board) return;
       const s = Store.data.settings;
       Object.assign(this.board.o, { showDests: s.dests, autoQueen: s.autoQueen, animMs: s.anim, premoves: s.premoves && this.mode === 'online' });
-      this.board.setCoords(s.coords); this.draw(false);
+      this.board.setCoords(s.coords); this.board.restyle(); this.draw(false);
     }
     save() {
       if (this.mode !== 'bot' || this.over) return;
-      Store.data.current = { mode: 'bot', bot: this.bot.id, me: this.me, startFen: this.game.startFen, moves: this.ucis, assisted: this.assisted, coach: this.coach ? this.coach.level : false, coached: this.coached, at: Date.now() };
+      Store.data.current = { mode: 'bot', bot: this.bot.id, me: this.me, startFen: this.game.startFen, moves: this.ucis, assisted: this.assisted, coach: this.coach ? this.coach.level : false, coached: this.coached, tc: this.tc, clock: this.clocksNow(), at: Date.now() };
       Store.save();
     }
     /* Coach Mira at a level (beginner | normal | extreme) or off (null). Her help counts like hints: no "beaten" badge for a game she was in. */
@@ -579,7 +609,9 @@
       const mine = color === 'r' || !color ? (Math.random() < 0.5 ? 'w' : 'b') : color;
       engine('bot').stop(); engine('coach').stop();   // forget anything a previous game asked for
       const B = Store.data.botRating, you = Object.assign(me(), { rating: B.games && !Rating.provisional(B) ? Math.round(B.r) : null });   // your bot rating, once it's settled
-      const ctl = new GameCtl({ mode: 'bot', me: mine, bot, startFen: opts.startFen, moves: opts.moves, players: mine === 'w' ? { w: you, b: bot } : { w: bot, b: you } });
+      // opts.tc: a clock ({ base, inc } in ms) – opts.clock: the time each side had left, when an unfinished game comes back
+      const ctl = new GameCtl({ mode: 'bot', me: mine, bot, startFen: opts.startFen, moves: opts.moves, players: mine === 'w' ? { w: you, b: bot } : { w: bot, b: you },
+        tc: opts.tc || null, clock: opts.clock, running: !!(opts.tc && opts.moves && opts.moves.length >= 2) });
       ctl.assisted = !!opts.assisted; ctl.coached = !!opts.coached;
       if (Coach.level(opts.coach) && !ctl.over) { ctl.coach = new Coach.Live(ctl, Coach.level(opts.coach)); ctl.assisted = ctl.coached = true; }
       this.current = ctl;
@@ -597,7 +629,7 @@
     resumeBot() {
       const c = Store.data.current; if (!c) return;
       const bot = findBot(c.bot); if (!bot) { Store.data.current = null; return; }
-      this.startBot(bot, c.me, { startFen: c.startFen, moves: c.moves, assisted: c.assisted, coach: c.coach, coached: c.coached });
+      this.startBot(bot, c.me, { startFen: c.startFen, moves: c.moves, assisted: c.assisted, coach: c.coach, coached: c.coached, tc: c.tc, clock: c.clock });
     },
     startLocal(o) {
       o = o || {};
@@ -608,7 +640,7 @@
       engine('rater').stop();   // a new game on screen: its own move ratings start from scratch
       const tc = (() => { const [b, i] = s.tc.split('+').map(Number); return { base: b * 60000, inc: i * 1000 }; })();
       const ctl = new GameCtl({ mode: s.you ? 'online' : 'watch', me: s.you || 'w', id: s.id, players: { w: s.white, b: s.black }, moves: s.moves, tc, clock: s.clock, running: s.running, rated: s.rated, cat: s.cat, drawOffer: s.drawOffer, online: s.online,
-        ratings: s.ratings, takebacks: s.takebacks, takebacksLeft: s.takebacksLeft });
+        ratings: s.ratings, takebacks: s.takebacks, takebacksLeft: s.takebacksLeft, shared: s.shared });
       if (!s.you) ctl.me = null;
       else if (Store.data.profile.img) ctl.players[s.you] = Object.assign({}, ctl.players[s.you], { img: Store.data.profile.img });   // your photo, on your screen only
       if (s.firstMoveLeft != null) ctl.firstDeadline = performance.now() + s.firstMoveLeft;

@@ -348,3 +348,29 @@ body.bigclock .clock { font-size: 26px; min-width: 112px; }
 .icon-grid .up span { font-size: 10.5px; font-weight: 700; color: var(--muted); }
 .icon-grid .up img { width: 100%; height: 100%; object-fit: cover; border-radius: 12px; }
 .av-edit { position: absolute; right: -4px; bottom: -4px; width: 24px; height: 24px; border-radius: 50%; background: var(--accent); color: var(--accentText); display: grid; place-items: center; font-size: 13px; font-weight: 800; border: 2px solid var(--bg); }
+
+/* ---------- piece styles ---------- */
+.piece-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); gap: 8px; }
+.piece-pick { border: 2px solid transparent; border-radius: 12px; padding: 6px 4px 4px; background: var(--card2); display: flex; flex-direction: column; align-items: center; gap: 3px; min-width: 0; }
+.piece-pick.on { border-color: var(--accent); }
+.piece-pick .pp { display: flex; width: 64px; height: 34px; border-radius: 7px; overflow: hidden; background: linear-gradient(90deg, var(--light) 50%, var(--dark) 50%); }
+.piece-pick .pp i { flex: 1; background-size: 88%; background-position: center; background-repeat: no-repeat; }
+.piece-pick .pp.plus { display: grid; place-items: center; background: var(--card); font-size: 20px; color: var(--accent); }
+.piece-pick .tiny { max-width: 100%; }
+.draw-page .kinds { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; margin: 10px 0; }
+.draw-page .kinds button { border: 2px solid transparent; border-radius: 10px; background: var(--card2); padding: 4px 2px; display: flex; flex-direction: column; align-items: center; font-size: 10.5px; font-weight: 700; color: var(--muted); }
+.draw-page .kinds button.on { border-color: var(--accent); color: var(--text); }
+.draw-page .kinds button i { width: 30px; height: 30px; background-size: contain; background-repeat: no-repeat; opacity: .45; }
+.draw-page .kinds button.done i { opacity: 1; }
+.pad-wrap { display: flex; justify-content: center; }
+.pad { width: min(100%, 380px); aspect-ratio: 1; touch-action: none; background: var(--light); border-radius: 14px; cursor: crosshair; }
+.pad .ghost { opacity: .16; }
+.previews { display: flex; gap: 8px; }
+.previews .pv { flex: none; width: 64px; height: 64px; border-radius: 8px; }
+.previews .pv.light { background: var(--light); } .previews .pv.dark { background: var(--dark); }
+.previews .pv i { display: block; width: 100%; height: 100%; background-size: 90%; background-position: center; background-repeat: no-repeat; }
+.title-badge { display: inline-block; background: #c7301f; color: #fff; font: 800 11px/1.5 system-ui, sans-serif; padding: 0 5px; border-radius: 4px; border: 0; vertical-align: 2px; flex-shrink: 0; }
+button.title-badge { cursor: pointer; }
+.disclaimer { margin: 8px 0 0; padding: 7px 10px; border-radius: 10px; background: var(--card2); font-size: 12.5px; color: var(--muted); border-left: 3px solid #c7301f; }
+.clock-grid { grid-template-columns: repeat(4, 1fr); }
+.clock-grid button small { display: block; font-size: 10.5px; color: var(--muted); font-weight: 700; text-transform: capitalize; }

@@ -86,6 +86,22 @@ async function move(p, from, to) { await tap(p, from); await wait(60); await tap
   await a.evaluate(() => { for (const b of MyBots.saved().slice()) MyBots.remove(b.id); Store.data.current = null; App.go('home'); });
   console.log('own bots ok');
 
+  // Trying Pip's title comes with its disclaimer
+  await a.evaluate(() => App.go('bots')); await a.click('[data-bot="tryingpip"]');
+  assert(/not an official grandmaster/i.test(await a.locator('.disclaimer').innerText()), 'the GM title is explained');
+  // a bot game with a clock: running out of time loses
+  await a.evaluate(() => Play.startBot(BOTS[0], 'w', { tc: { base: 60000, inc: 0 } }));
+  await a.waitForFunction(() => Play.current.el && Play.current.tc && !document.querySelector('.sheet-wrap'));
+  await move(a, 'e2', 'e4'); await a.waitForFunction(() => Play.current.game.history.length >= 2, null, { timeout: 15000 });
+  await a.evaluate(() => { const c = Play.current; c.clock[0] = 800; c.clockAt = performance.now(); });
+  await a.waitForFunction(() => Play.current.over, null, { timeout: 5000 });
+  assert.strictEqual(await a.evaluate(() => Play.current.over.reason), 'timeout');
+  await a.waitForSelector('[data-r="review"]'); await a.evaluate(() => { UI.closeSheet(); App.go('home'); });
+  // piece styles switch everywhere at once
+  assert(/crispEdges/.test(await a.evaluate(() => { Store.data.settings.pieces = PIECES.use('pixel'); return PIECES.svg('wK'); })), 'pixel pieces');
+  await a.evaluate(() => { Store.data.settings.pieces = PIECES.use('classic'); });
+  console.log('bot clock, Trying Pip, piece styles ok');
+
   // a rated puzzle, solved with its own solution
   await a.evaluate(() => App.go('puzzle', { mode: 'rated' }));
   await a.waitForFunction(() => Puzzles.active && Puzzles.active.step === 1, null, { timeout: 10000 });

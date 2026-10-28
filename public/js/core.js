@@ -5,10 +5,10 @@
   const randHex = n => { const a = new Uint8Array(n); (root.crypto || {}).getRandomValues ? root.crypto.getRandomValues(a) : a.forEach((_, i) => { a[i] = Math.random() * 256; }); return [...a].map(x => x.toString(16).padStart(2, '0')).join(''); };
 
   /* ---------- saved data (this device) ---------- */
-  const DEFAULT_SETTINGS = { board: 'grass', sound: true, dests: true, coords: true, lastMove: true, autoQueen: false, premoves: true, anim: 200, theme: 'dark', server: '', confirmResign: true, bigClock: false, evalBar: true, botChat: true, vibrate: true };
+  const DEFAULT_SETTINGS = { board: 'grass', sound: true, dests: true, coords: true, lastMove: true, autoQueen: false, premoves: true, anim: 200, theme: 'dark', server: '', confirmResign: true, bigClock: false, evalBar: true, botChat: true, vibrate: true, pieces: 'classic' };
   function blank() {
     return { v: 1, profile: { token: randHex(24), name: '', face: Math.floor(Math.random() * 1e9), created: Date.now() }, settings: Object.assign({}, DEFAULT_SETTINGS),
-      puzzles: Object.assign(Rating.fresh(), { seen: {}, solved: 0, failed: 0, streak: 0, bestStreak: 0, log: [] }), rush: { best: 0, runs: 0 }, games: [], beaten: {}, botRating: Rating.fresh(),
+      puzzles: Object.assign(Rating.fresh(), { seen: {}, solved: 0, failed: 0, streak: 0, bestStreak: 0, log: [] }), rush: { best: 0, runs: 0 }, games: [], beaten: {}, botRating: Rating.fresh(), pieceSets: [],
       online: { id: '', ratings: {} }, lessons: {}, drills: {}, current: null };
   }
   let data;
@@ -16,6 +16,7 @@
   if (!data || data.v !== 1) data = blank();
   data.settings = Object.assign({}, DEFAULT_SETTINGS, data.settings);
   const fill = blank(); for (const k in fill) if (data[k] == null) data[k] = fill[k];
+  if (root.PIECES) PIECES.use(data.settings.pieces, data.pieceSets);   // the piece style chosen in Settings
   let saveT = null;
   const write = () => { saveT = null; try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) {} };
   const Store = {
@@ -91,14 +92,14 @@
     return '#' + ((1 << 24) + (c[0] << 16) + (c[1] << 8) + c[2]).toString(16).slice(1);
   }
   /* o: { bg, skin (0-5), hair (0-7 color), style (0-8: bald, short, long, bun, spiky, swept, curly, bob, afro), eyes (0-3: plain,
-     happy, big, stern), mouth (0-3: smile, flat, oh, grin), acc (0-7: none, glasses, cap, crown, headphones, bow, earrings, beanie),
-     and optionally shirt, brows (0-2), nose (0-2), beard (0-3: none, stubble, mustache, full), iris (0-3), age (0/1), freckles } */
+     happy, big, stern), mouth (0-3: smile, flat, oh, grin), acc (0-8: none, glasses, cap, crown, headphones, bow, earrings, beanie, sweatband),
+     and optionally shirt, brows (0-2), nose (0-2), beard (0-3: none, stubble, mustache, full), iris (0-3), age (0/1), freckles, sweat } */
   function face(o) {
     const sk = SKIN[(o.skin || 0) % 6], skD = shade(sk, -0.16), skDD = shade(sk, -0.32);
     const hc = HAIR[(o.hair || 0) % 8], hD = shade(hc, -0.28), hL = shade(hc, 0.35);
     const bg = typeof o.bg === 'string' ? o.bg : BG[(o.bg || 0) % BG.length];
     const shirt = typeof o.shirt === 'string' ? o.shirt : SHIRT[(o.shirt != null ? o.shirt : (o.bg || 0) + 3) % SHIRT.length];
-    const style = (o.style || 0) % 9, acc = (o.acc || 0) % 8, eyes = (o.eyes || 0) % 4, iris = IRIS[(o.iris || 0) % 4];
+    const style = (o.style || 0) % 9, acc = (o.acc || 0) % 9, eyes = (o.eyes || 0) % 4, iris = IRIS[(o.iris || 0) % 4];
     const brows = o.brows != null ? o.brows % 3 : eyes === 3 ? 2 : eyes === 2 ? 1 : 0, beard = (o.beard || 0) % 4;
     const P = (d, fill, extra) => '<path d="' + d + '" fill="' + fill + '"' + (extra || '') + '/>';
     const S = (d, stroke, w, extra) => '<path d="' + d + '" fill="none" stroke="' + stroke + '" stroke-width="' + w + '" stroke-linecap="round" stroke-linejoin="round"' + (extra || '') + '/>';
@@ -176,6 +177,8 @@
     if (acc === 5) s += P('M60 27l10-8 2 12z M60 27l-9-7-2 11z', '#e2544b') + '<circle cx="60" cy="27" r="3" fill="#b93b33"/>';
     if (acc === 6) s += '<circle cx="29" cy="59" r="2.1" fill="#f2c14e"/><circle cx="71" cy="59" r="2.1" fill="#f2c14e"/>';
     if (acc === 7) s += P('M27 42c0-13 10-21 23-21s23 8 23 21z', '#e2544b') + '<rect x="26" y="37" width="48" height="7" rx="3.5" fill="#b93b33"/><circle cx="50" cy="19" r="3.4" fill="#f2f2f2"/>';
+    if (acc === 8) s += P('M28 37q22-9 44 0v6q-22-9-44 0z', '#e2544b') + S('M30 39.5q20-7.5 40 0', '#fff', 1.2, ' opacity=".45"');
+    if (o.sweat) s += P('M70 30c2 3 3.5 5 3.5 7a3.5 3.5 0 0 1-7 0c0-2 1.5-4 3.5-7z', '#7cc8f2') + '<circle cx="69" cy="36" r="1" fill="#fff" opacity=".8"/>';
     return s + '</svg>';
   }
   /* a face of its own for every player (the seed is a number saved on their device) */
@@ -261,6 +264,8 @@
     { id: 'wren', name: 'Wren', rating: 2100, blurb: 'A titled player who streams blitz at 3am.', face: { bg: 9, skin: 2, hair: 7, style: 5, eyes: 1, mouth: 3, acc: 4, shirt: 7 }, level: BotPlay.LEVELS.wren },
     { id: 'atlas', name: 'Atlas', rating: 2350, blurb: 'Calculates deep and almost never blunders.', face: { bg: '#2b2f36', skin: 0, hair: 5, style: 0, eyes: 3, mouth: 1, acc: 1, shirt: '#46536a', brows: 2, nose: 2 }, level: BotPlay.LEVELS.atlas },
     { id: 'titan', name: 'Titan', rating: 2800, blurb: 'The engine at full strength – the hardest opponent here.', face: { bg: '#1b2433', skin: 2, hair: 6, style: 4, eyes: 3, mouth: 1, acc: 3, shirt: '#c9a227', brows: 2, beard: 1 }, level: BotPlay.LEVELS.titan },
+    { id: 'tryingpip', name: 'Trying Pip', rating: 3500, title: 'GM', blurb: 'It’s Pip – but this time Pip is trying really, really hard. Thinks for ages and plays like a monster.',
+      face: { bg: 5, skin: 0, hair: 3, style: 3, eyes: 3, brows: 2, mouth: 1, acc: 8, shirt: 3, freckles: true, nose: 1, iris: 1, sweat: true }, level: BotPlay.forElo(3500) },
   ];
   /* what each bot says during a game: hello, gotcha (it took a piece), ouch (it lost one), check, win, lose, draw */
   const CHAT = {
@@ -275,9 +280,12 @@
     dmitri: { hello: 'I have calculated many games. Begin.', gotcha: 'As calculated.', ouch: '…I missed that.', check: 'Check.', win: 'The calculation was correct.', lose: 'Remarkable. I must recalculate.', draw: 'Equal. As expected.' },
     wren: { hello: 'gl hf!', gotcha: 'free piece, ty', ouch: 'oof, nice shot', check: 'check :)', win: 'gg wp', lose: 'gg, you’re cracked', draw: 'gg, peace' },
     atlas: { hello: 'Searching… ready.', gotcha: 'Evaluation improved.', ouch: 'Unexpected.', check: 'Check.', win: 'Checkmate was inevitable.', lose: 'I lost? Well played, human.', draw: 'Draw.' },
+    tryingpip: { hello: 'I’ve been practicing! Like, really, REALLY practicing.', gotcha: 'I calculated that! I think.', ouch: 'Wait – I was trying!', check: 'Check! Just like a real grandmaster!', win: 'I did it! Trying works!', lose: 'Wow. I tried SO hard. Good game!', draw: 'A draw? I’ll take it!' },
     titan: { hello: 'Full power. Let’s see what you’ve got.', gotcha: 'Calculated.', ouch: 'Interesting choice…', check: 'Check.', win: 'As expected.', lose: 'Incredible. You beat the full engine!', draw: 'A draw against me is a great result.' },
   };
   for (const b of BOTS) { b.faceSvg = face(b.face); b.isBot = true; b.chat = CHAT[b.id]; }
+  /* a bot's title is just for fun – said wherever it's explained */
+  const TITLE_NOTE = 'This is not an official grandmaster. Rooftop Chess does not make or give grandmaster titles.';
 
   /* ---------- your own bots: up to 3, kept on this device, so only you can play them ---------- */
   const MAX_MY_BOTS = 3;
@@ -316,5 +324,5 @@
   const findBot = id => BOTS.find(b => b.id === id) || MyBots.list().find(b => b.id === id) || null;
 
   root.UI = { esc, $, $$, toast, sheet, closeSheet, confirmBox, fmtClock, ago, copy, avatarHtml, face, faceFromSeed, faceParams, pickImage };
-  root.Store = Store; root.engine = engine; root.BOTS = BOTS; root.MyBots = MyBots; root.findBot = findBot; root.randHex = randHex;
+  root.Store = Store; root.engine = engine; root.BOTS = BOTS; root.MyBots = MyBots; root.findBot = findBot; root.TITLE_NOTE = TITLE_NOTE; root.randHex = randHex;
 })(typeof self !== 'undefined' ? self : this);

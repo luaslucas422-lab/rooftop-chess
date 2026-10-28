@@ -116,7 +116,7 @@ function createChessServer(opts) {
   const wss = new WebSocketServer({ noServer: true, maxPayload: 8 * 1024 });
 
   const people = new Map();     // id -> { id, ws, profile, game, seek, challenge, watching }
-  const seeks = new Map();      // tc -> [{ id, since, color: w | b | r, ratings, takebacks }]
+  const seeks = new Map();      // tc -> [{ id, since, color: w | b | r, ratings, takebacks, shared }]
   const TAKEBACKS = [0, 3, 10, -1];   // takebacks each player gets in a game: none, 3, 10, or (-1) as many as they like
   const challenges = new Map(); // code -> { code, from, tc, color, rated, at }
   const games = new Map();      // id -> game
@@ -140,19 +140,22 @@ function createChessServer(opts) {
   function gameState(g, forId) {
     return { t: 'game', id: g.id, white: g.players.w, black: g.players.b, tc: g.tc.label, cat: g.cat, rated: g.rated, moves: g.chess.history.map(h => h.uci),
       clock: clocksNow(g), turn: g.chess.turn, running: g.chess.history.length >= 2 && !g.over, you: g.ids.w === forId ? 'w' : g.ids.b === forId ? 'b' : null,
-      drawOffer: g.drawOffer, ratings: !!g.ratings, takebacks: g.takebacks, takebacksLeft: g.tbLeft, over: g.over ? { result: g.result, reason: g.reason, winner: g.winner, ratings: g.ratingChange || null } : null,
+      drawOffer: g.drawOffer, ratings: !!g.ratings, takebacks: g.takebacks, takebacksLeft: g.tbLeft, shared: !!g.shared, over: g.over ? { result: g.result, reason: g.reason, winner: g.winner, ratings: g.ratingChange || null } : null,
       firstMoveLeft: g.chess.history.length < 2 ? Math.max(0, FIRST_MOVE_MS - (now() - g.turnStart)) : null,
       online: { w: isOnline(g.ids.w), b: isOnline(g.ids.b) }, spectators: g.watchers.size };
   }
   const isOnline = id => { const p = people.get(id); return !!(p && p.ws && p.ws.readyState === 1); };
   function clocksNow(g) {
     const c = g.clock.slice();
-    if (!g.over && g.chess.history.length >= 2) { const i = g.chess.turn === 'w' ? 0 : 1; c[i] = Math.max(0, c[i] - (now() - g.turnStart)); }
+    if (!g.over && g.chess.history.length >= 2) { const i = g.chess.turn === 'w' ? 0 : 1; c[i] = Math.max(0, c[i] - (now() - g.turnStart)); if (g.shared) c[1 - i] = c[i]; }
     return c;
   }
+  /* set a side's clock – with a shared clock both players have the same time, always */
+  function setClock(g, i, ms) { g.clock[i] = ms; if (g.shared) g.clock[1 - i] = ms; }
   function broadcast(g, o) { send((people.get(g.ids.w) || {}).ws, o); send((people.get(g.ids.b) || {}).ws, o); for (const ws of g.watchers) send(ws, o); }
 
-  /* opts: { ratings (show move ratings during the game), takebacks (how many moves each side may take back: 0, 3, 10, or -1 for any number) } */
+  /* opts: { ratings (show move ratings during the game), takebacks (how many moves each side may take back: 0, 3, 10, or -1 for any number),
+     shared (one clock for both players: it runs whoever is thinking, and whoever is to move when it runs out loses) } */
   async function startGame(idW, idB, tcLabel, rated, from, opts) {
     const pw = people.get(idW), pb = people.get(idB);
     if (!pw || !pb) return;
@@ -160,7 +163,7 @@ function createChessServer(opts) {
     const tb = (opts && opts.takebacks) || 0;
     const g = { id: 'g' + (gameSeq++).toString(36) + crypto.randomBytes(3).toString('hex'), ids: { w: idW, b: idB }, tc, cat, rated: rated !== false,
       players: { w: publicPlayer(pw.profile, cat), b: publicPlayer(pb.profile, cat) }, chess: new Chess.Game(), clock: [tc.base, tc.base],
-      turnStart: now(), timer: null, drawOffer: null, ratings: !!(opts && opts.ratings), takebacks: (opts && opts.takebacks) || 0, rematch: null, watchers: new Set(), over: false, startedAt: now(), from: from || 'seek', gone: { w: 0, b: 0 } };
+      turnStart: now(), timer: null, drawOffer: null, ratings: !!(opts && opts.ratings), takebacks: (opts && opts.takebacks) || 0, shared: !!(opts && opts.shared), rematch: null, watchers: new Set(), over: false, startedAt: now(), from: from || 'seek', gone: { w: 0, b: 0 } };
     g.tbLeft = { w: tb, b: tb };
     games.set(g.id, g);
     for (const p of [pw, pb]) { p.game = g.id; unseek(p); cancelChallenge(p); }
@@ -188,7 +191,7 @@ function createChessServer(opts) {
     }
     if (n < 2) { if (t - g.turnStart >= FIRST_MOVE_MS) return finish(g, null, 'aborted', false); }
     else if (clocksNow(g)[side === 'w' ? 0 : 1] <= 0) {
-      g.clock[side === 'w' ? 0 : 1] = 0;
+      setClock(g, side === 'w' ? 0 : 1, 0);
       const winner = g.chess.timeoutResult(side);
       return finish(g, winner, winner ? 'timeout' : 'timeout vs insufficient material');
     }
@@ -198,7 +201,7 @@ function createChessServer(opts) {
   async function finish(g, winner, reason, rated) {
     if (g.over) return;
     clearTimeout(g.timer);
-    if (g.chess.history.length >= 2) { const i = g.chess.turn === 'w' ? 0 : 1; g.clock[i] = Math.max(0, g.clock[i] - (now() - g.turnStart)); }
+    if (g.chess.history.length >= 2) { const i = g.chess.turn === 'w' ? 0 : 1; setClock(g, i, Math.max(0, g.clock[i] - (now() - g.turnStart))); }
     g.over = true; g.winner = winner || null; g.reason = reason;
     g.result = winner === 'w' ? '1-0' : winner === 'b' ? '0-1' : reason === 'aborted' ? '*' : '1/2-1/2';
     g.chess.finish(winner, reason);
@@ -233,12 +236,12 @@ function createChessServer(opts) {
     const t = now(), n = g.chess.history.length;
     const ci = color === 'w' ? 0 : 1;
     if (n >= 2) {
-      g.clock[ci] -= Math.max(0, t - g.turnStart - Math.min(p.lag || 0, LAG_CREDIT_MAX));
-      if (g.clock[ci] <= 0) { g.clock[ci] = 0; const winner = g.chess.timeoutResult(color); return finish(g, winner, winner ? 'timeout' : 'timeout vs insufficient material'); }
+      setClock(g, ci, g.clock[ci] - Math.max(0, t - g.turnStart - Math.min(p.lag || 0, LAG_CREDIT_MAX)));
+      if (g.clock[ci] <= 0) { setClock(g, ci, 0); const winner = g.chess.timeoutResult(color); return finish(g, winner, winner ? 'timeout' : 'timeout vs insufficient material'); }
     }
     const rec = g.chess.move(uci);
     if (!rec) return send(p.ws, gameState(g, p.id));
-    if (n >= 2) g.clock[ci] += g.tc.inc;
+    if (n >= 2) setClock(g, ci, g.clock[ci] + g.tc.inc);
     g.turnStart = t;
     if (g.drawOffer && g.drawOffer !== color) g.drawOffer = null;   // moving declines their offer
     broadcast(g, { t: 'move', id: g.id, uci: rec.uci, san: rec.san, ply: g.chess.history.length, clock: g.clock.slice(), running: g.chess.history.length >= 2, drawOffer: g.drawOffer });
@@ -254,7 +257,7 @@ function createChessServer(opts) {
     if (h.length - k < 1 || h[h.length - 1 - k].color !== who) return;
     k++;
     const t = now();
-    if (h.length >= 2) { const i = g.chess.turn === 'w' ? 0 : 1; g.clock[i] = Math.max(0, g.clock[i] - (t - g.turnStart)); }
+    if (h.length >= 2) { const i = g.chess.turn === 'w' ? 0 : 1; setClock(g, i, Math.max(0, g.clock[i] - (t - g.turnStart))); }
     for (let i = 0; i < k; i++) g.chess.undo();
     if (g.tbLeft[who] > 0) g.tbLeft[who]--;
     g.turnStart = t; g.drawOffer = null;
@@ -268,7 +271,7 @@ function createChessServer(opts) {
   function unseek(p) { if (!p.seek) return; const list = seeks.get(p.seek) || []; seeks.set(p.seek, list.filter(s => s.id !== p.id)); p.seek = null; }
   function cancelChallenge(p) { if (p.challenge) { challenges.delete(p.challenge); p.challenge = null; } }
   /* two seeks can be paired when they chose the same extras and their colors don't clash */
-  const fits = (a, b) => a.ratings === b.ratings && a.takebacks === b.takebacks && !(a.color !== 'r' && a.color === b.color);
+  const fits = (a, b) => a.ratings === b.ratings && a.takebacks === b.takebacks && a.shared === b.shared && !(a.color !== 'r' && a.color === b.color);
   function matchmake() {
     for (const [tc, list] of seeks) {
       if (list.length < 2) continue;
@@ -288,8 +291,8 @@ function createChessServer(opts) {
           list.splice(best, 1); list.splice(i, 1); i--;
           const pb = people.get(b.id); pa.seek = null; pb.seek = null;
           const aWhite = a.color === 'w' || b.color === 'b' ? true : a.color === 'b' || b.color === 'w' ? false : Math.random() < 0.5;
-          // move ratings and takebacks are help: those games don't count for ratings
-          startGame(aWhite ? a.id : b.id, aWhite ? b.id : a.id, tc, !a.ratings && !a.takebacks, 'seek', { ratings: a.ratings, takebacks: a.takebacks });
+          // move ratings and takebacks are help, and a shared clock is a different game: those games don't count for ratings
+          startGame(aWhite ? a.id : b.id, aWhite ? b.id : a.id, tc, !a.ratings && !a.takebacks && !a.shared, 'seek', { ratings: a.ratings, takebacks: a.takebacks, shared: a.shared });
         }
       }
       seeks.set(tc, list.filter(s => isOnline(s.id)));
@@ -348,7 +351,7 @@ function createChessServer(opts) {
         const tc = String(m.tc); if (!TIME_CONTROLS.includes(tc) || p.game) return;
         unseek(p); cancelChallenge(p); p.seek = tc;
         if (!seeks.has(tc)) seeks.set(tc, []);
-        const opt = { color: ['w', 'b'].includes(m.color) ? m.color : 'r', ratings: !!m.ratings, takebacks: TAKEBACKS.includes(m.takebacks) ? m.takebacks : 0 };
+        const opt = { color: ['w', 'b'].includes(m.color) ? m.color : 'r', ratings: !!m.ratings, takebacks: TAKEBACKS.includes(m.takebacks) ? m.takebacks : 0, shared: !!m.shared };
         seeks.get(tc).push(Object.assign({ id: p.id, since: now() }, opt));
         send(ws, Object.assign({ t: 'seeking', tc }, opt)); matchmake(); return;
       }
@@ -403,7 +406,7 @@ function createChessServer(opts) {
         if (g.rematch === other) {
           if (!isOnline(g.ids[other])) return send(ws, { t: 'error', msg: 'They left' });
           if ((people.get(g.ids.w) || {}).game || (people.get(g.ids.b) || {}).game) return send(ws, { t: 'error', msg: 'They’re already in another game' });
-          finished.delete(g.id); startGame(g.ids.b, g.ids.w, g.tc.label, g.rated, 'rematch', { ratings: g.ratings, takebacks: g.takebacks }); return;
+          finished.delete(g.id); startGame(g.ids.b, g.ids.w, g.tc.label, g.rated, 'rematch', { ratings: g.ratings, takebacks: g.takebacks, shared: g.shared }); return;
         }
         g.rematch = c; sendTo(g.ids[other], { t: 'offer', id: g.id, kind: 'rematch', from: c }); send(ws, { t: 'rematchSent', id: g.id }); return;
       }

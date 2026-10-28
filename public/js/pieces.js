@@ -1,4 +1,5 @@
-/* Rooftop Chess – piece artwork (drawn for this app). PIECES.svg('wK') gives an SVG string, PIECES.url('wK') a data URL. */
+/* Rooftop Chess – piece artwork (drawn for this app) in several styles, plus sets you draw yourself.
+   PIECES.svg('wK') gives an SVG string and PIECES.url('wK') a data URL in the style chosen with PIECES.use(). */
 (function (root) {
   'use strict';
   const base = '<path d="M22 84h56a5 5 0 0 1 5 5v4H17v-4a5 5 0 0 1 5-5z"/>';
@@ -15,16 +16,70 @@
     k: '<path d="M46.5 9h7v8h7v6.5h-7v9h-7v-9h-7V17h7z"/><path d="M50 36c-4-5-9-6-13-6-10 0-17 9-14 21 2 8 5 15 6 23h42c1-8 4-15 6-23 3-12-4-21-14-21-4 0-9 1-13 6z"/>' +
       '<path d="M26 84c1-3 2-7 3-10h42c1 3 2 7 3 10z"/><path class="d" d="M50 37v24M30 74h40M32 62h36" fill="none"/>' + base,
   };
-  const STYLE = {
-    w: '<style>*{fill:#fbf8f1;stroke:#26221d;stroke-width:3;stroke-linejoin:round;stroke-linecap:round}.d{stroke:#26221d;stroke-width:2.4}.e{fill:#26221d;stroke:none}</style>',
-    b: '<style>*{fill:#35302b;stroke:#120f0c;stroke-width:3;stroke-linejoin:round;stroke-linecap:round}.d{stroke:#cfc7bb;stroke-width:2.4}.e{fill:#efe8dc;stroke:none}</style>',
+  /* the built-in styles: colors for the drawn shapes, or a different way of drawing them */
+  const COLORS = {
+    classic: { w: '<style>*{fill:#fbf8f1;stroke:#26221d;stroke-width:3;stroke-linejoin:round;stroke-linecap:round}.d{stroke:#26221d;stroke-width:2.4}.e{fill:#26221d;stroke:none}</style>',
+      b: '<style>*{fill:#35302b;stroke:#120f0c;stroke-width:3;stroke-linejoin:round;stroke-linecap:round}.d{stroke:#cfc7bb;stroke-width:2.4}.e{fill:#efe8dc;stroke:none}</style>' },
+    royal: { w: '<style>*{fill:#fff6dc;stroke:#8a6512;stroke-width:3.2;stroke-linejoin:round;stroke-linecap:round}.d{stroke:#b8891c;stroke-width:2.4}.e{fill:#8a6512;stroke:none}</style>',
+      b: '<style>*{fill:#1f2b4a;stroke:#d9b45a;stroke-width:3.2;stroke-linejoin:round;stroke-linecap:round}.d{stroke:#e8c66c;stroke-width:2.4}.e{fill:#e8c66c;stroke:none}</style>' },
+    neon: { w: '<style>*{fill:#0d1b26;stroke:#4ff3ff;stroke-width:3.6;stroke-linejoin:round;stroke-linecap:round}.d{stroke:#4ff3ff;stroke-width:2.4}.e{fill:#4ff3ff;stroke:none}</style>',
+      b: '<style>*{fill:#22081d;stroke:#ff4fd1;stroke-width:3.6;stroke-linejoin:round;stroke-linecap:round}.d{stroke:#ff4fd1;stroke-width:2.4}.e{fill:#ff4fd1;stroke:none}</style>' },
+    ink: { w: '<style>*{fill:#fff;stroke:#111;stroke-width:4.2;stroke-linejoin:round;stroke-linecap:round}.d{stroke:#111;stroke-width:3}.e{fill:#111;stroke:none}</style>',
+      b: '<style>*{fill:#111;stroke:#111;stroke-width:4.2;stroke-linejoin:round;stroke-linecap:round}.d{stroke:#fff;stroke-width:3}.e{fill:#fff;stroke:none}</style>' },
   };
-  const cache = {};
-  function svg(code) {
-    const c = code[0], t = code[1].toLowerCase();
-    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' + STYLE[c] + '<g>' + SHAPES[t] + '</g></svg>';
+  /* Pixel: 12×12 sprites; the outline is worked out around the filled cells */
+  const SPRITES = {
+    p: ['............', '.....##.....', '....####....', '....####....', '.....##.....', '....####....', '.....##.....', '.....##.....', '....####....', '...######...', '..########..', '............'],
+    r: ['............', '..##.##.##..', '..########..', '...######...', '....####....', '....####....', '....####....', '....####....', '...######...', '..########..', '..########..', '............'],
+    n: ['............', '....#.#.....', '....#####...', '...#######..', '..###.####..', '..#######...', '.....####...', '....#####...', '....#####...', '...######...', '..########..', '............'],
+    b: ['............', '.....##.....', '....####....', '...##.###...', '...######...', '...######...', '....####....', '.....##.....', '....####....', '...######...', '..########..', '............'],
+    q: ['............', '.#...##...#.', '.##..##..##.', '.##########.', '..########..', '...######...', '....####....', '....####....', '...######...', '..########..', '..########..', '............'],
+    k: ['.....##.....', '....####....', '.....##.....', '...######...', '..########..', '..########..', '...######...', '....####....', '...######...', '..########..', '..########..', '............'],
+  };
+  function pixel(c, t) {
+    const g = SPRITES[t], fill = c === 'w' ? '#f7f3ea' : '#2e2a26', line = c === 'w' ? '#221e1a' : '#ece4d6', u = 100 / 13, at = (x, y) => g[y] && g[y][x] === '#';
+    let out = '';
+    for (let y = -1; y <= 12; y++) for (let x = -1; x <= 12; x++) {
+      const on = at(x, y), edge = !on && (at(x - 1, y) || at(x + 1, y) || at(x, y - 1) || at(x, y + 1));
+      if (on || edge) out += '<rect x="' + ((x + 0.5) * u).toFixed(2) + '" y="' + ((y + 0.5) * u).toFixed(2) + '" width="' + (u + 0.1).toFixed(2) + '" height="' + (u + 0.1).toFixed(2) + '" fill="' + (on ? fill : line) + '"/>';
+    }
+    return out;
   }
-  function url(code) { return cache[code] || (cache[code] = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg(code))); }
-  const api = { svg, url, CODES: ['wK', 'wQ', 'wR', 'wB', 'wN', 'wP', 'bK', 'bQ', 'bR', 'bB', 'bN', 'bP'] };
+  /* Letters: a disc with the piece's letter */
+  function letter(c, t) {
+    const fill = c === 'w' ? '#f7f3ea' : '#2e2a26', ink = c === 'w' ? '#2e2a26' : '#f7f3ea';
+    return '<circle cx="50" cy="50" r="38" fill="' + fill + '" stroke="' + ink + '" stroke-width="4"/><text x="50" y="51" text-anchor="middle" dominant-baseline="central" font-family="Georgia,serif" font-weight="700" font-size="46" fill="' + ink + '">' + t.toUpperCase() + '</text>';
+  }
+  /* your own drawn pieces: { name, w (pen width), s: { k: [[x0, y0, x1, y1, …], …], q: …, … } } on a 100×100 square.
+     White pieces are drawn white with a dark edge, black ones dark with a light edge; a piece not drawn yet uses Classic. */
+  function drawn(c, t, set) {
+    const strokes = set.s && set.s[t]; if (!strokes || !strokes.length) return null;
+    const w = Math.max(2, Math.min(16, +set.w || 7)), main = c === 'w' ? '#ffffff' : '#1d1b19', edge = c === 'w' ? '#1d1b19' : '#efe9dd';
+    const d = strokes.map(p => { let s = ''; for (let i = 0; i + 1 < p.length; i += 2) s += (i ? 'L' : 'M') + (+p[i]).toFixed(1) + ' ' + (+p[i + 1]).toFixed(1); return p.length === 2 ? s + 'l.1 0' : s; }).join('');
+    return '<path d="' + d + '" fill="none" stroke="' + edge + '" stroke-width="' + (w + 5) + '" stroke-linecap="round" stroke-linejoin="round"/><path d="' + d + '" fill="none" stroke="' + main + '" stroke-width="' + w + '" stroke-linecap="round" stroke-linejoin="round"/>';
+  }
+  const STYLES = [['classic', 'Classic'], ['royal', 'Royal'], ['neon', 'Neon'], ['ink', 'Ink'], ['pixel', 'Pixel'], ['letters', 'Letters']];
+  const wrap = body => '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">' + body + '</svg>';
+  /* a piece in any style. set: one of your drawn sets (when style is its id) */
+  function svgIn(code, style, set) {
+    const c = code[0], t = code[1].toLowerCase();
+    if (set) { const d = drawn(c, t, set); if (d) return wrap(d); style = 'classic'; }
+    if (style === 'pixel') return wrap('<g shape-rendering="crispEdges">' + pixel(c, t) + '</g>');
+    if (style === 'letters') return wrap(letter(c, t));
+    return wrap((COLORS[style] || COLORS.classic)[c] + '<g>' + SHAPES[t] + '</g>');
+  }
+  const toUrl = svgText => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svgText);
+  let current = 'classic', currentSet = null, cache = {};
+  /* switch every piece in the app to a style (sets: your drawn sets, to find a custom one by id) */
+  function use(style, sets) {
+    cache = {}; currentSet = null; current = 'classic';
+    if (STYLES.some(x => x[0] === style)) current = style;
+    else if (sets) { const c = sets.find(x => x.id === style); if (c) { current = style; currentSet = c; } }
+    return current;
+  }
+  const svg = code => svgIn(code, current, currentSet);
+  function url(code) { return cache[code] || (cache[code] = toUrl(svg(code))); }
+  const preview = (code, style, set) => toUrl(svgIn(code, style, set));
+  const api = { svg, url, use, preview, STYLES, SHAPES, get style() { return current; }, CODES: ['wK', 'wQ', 'wR', 'wB', 'wN', 'wP', 'bK', 'bQ', 'bR', 'bB', 'bN', 'bP'] };
   if (typeof module === 'object' && module.exports) module.exports = api; else root.PIECES = api;
 })(typeof self !== 'undefined' ? self : this);

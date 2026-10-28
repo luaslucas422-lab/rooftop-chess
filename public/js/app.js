@@ -8,8 +8,8 @@
   const tcText = t => t.replace('+', ' | ');
   const catOf = t => { const [b, i] = t.split('+').map(Number); return Rating.category(b * 60, i); };
   const S = () => Store.data.settings;
-  const FULL = new Set(['game', 'puzzle', 'rush', 'analysis', 'review', 'lesson', 'drill', 'editor']);
-  const TAB_OF = { home: 'home', online: 'home', friend: 'home', bots: 'home', local: 'home', puzzles: 'puzzles', learn: 'learn', watch: 'watch', profile: 'profile', settings: 'profile', leaders: 'profile', games: 'profile' };
+  const FULL = new Set(['game', 'puzzle', 'rush', 'analysis', 'review', 'lesson', 'drill', 'editor', 'drawpieces']);
+  const TAB_OF = { home: 'home', online: 'home', friend: 'home', bots: 'home', local: 'home', puzzles: 'puzzles', learn: 'learn', watch: 'watch', profile: 'profile', settings: 'profile', drawpieces: 'profile', leaders: 'profile', games: 'profile' };
   let cleanup = null, current = { route: 'home', params: {} }, installEvt = null, depth = 0;   // depth: how many screens back we can go inside the app
 
   /* ---------- navigation ---------- */
@@ -126,12 +126,12 @@
   function online(el, params) {
     let tc = params.tc || Store.data.lastTc || '10+0', seeking = false, t0 = 0, iv = null;
     // what you're looking for: you're only paired with someone whose choices fit (colors that don't clash, the same extras)
-    const opt = Object.assign({ color: 'r', ratings: false, takebacks: 0 }, Store.data.lastSeek);
+    const opt = Object.assign({ color: 'r', ratings: false, takebacks: 0, shared: false }, Store.data.lastSeek);
     const TB = [[0, 'Off'], [3, '3 each'], [10, '10 each'], [-1, 'Unlimited']];   // takebacks each player gets (-1: any number)
     if (!TB.some(([n]) => n === opt.takebacks)) opt.takebacks = 0;
-    const casual = () => !!(opt.ratings || opt.takebacks);
+    const casual = () => !!(opt.ratings || opt.takebacks || opt.shared);
     const tbText = n => n < 0 ? 'unlimited takebacks' : n + ' takebacks each';
-    const optText = () => [opt.color === 'w' ? 'as White' : opt.color === 'b' ? 'as Black' : '', opt.ratings ? 'move ratings' : '', opt.takebacks ? tbText(opt.takebacks) : '', casual() ? 'casual' : ''].filter(Boolean).join(' · ');
+    const optText = () => [opt.color === 'w' ? 'as White' : opt.color === 'b' ? 'as Black' : '', opt.ratings ? 'move ratings' : '', opt.takebacks ? tbText(opt.takebacks) : '', opt.shared ? 'shared clock' : '', casual() ? 'casual' : ''].filter(Boolean).join(' · ');
     const sw = (id, on, name, text) => '<label class="row gap" style="margin:12px 2px"><span class="grow"><b>' + name + '</b><span class="small muted" style="display:block">' + text + '</span></span><span class="switch"><input type="checkbox" id="' + id + '"' + (on ? ' checked' : '') + '><span></span></span></label>';
     const draw = () => {
       const R = Store.data.online.ratings || {}, cat = catOf(tc);
@@ -141,6 +141,7 @@
           tcPicker(tc) +
           '<div class="tc-label">I play</div><div class="seg">' + [['w', 'White'], ['r', 'Random'], ['b', 'Black']].map(([k, n]) => '<button data-color="' + k + '" class="' + (opt.color === k ? 'on' : '') + '">' + n + '</button>').join('') + '</div>' +
           sw('opt-ratings', opt.ratings, 'Move ratings', 'Show how good every move is (best, mistake, blunder…) and both players’ accuracy during the game') +
+          sw('opt-shared', opt.shared, 'Shared clock', 'One clock for both players instead of one each. It runs whoever is thinking – if it runs out on your move, you lose.') +
           '<div class="tc-label">Takebacks</div><div class="seg">' + TB.map(([n, t]) => '<button data-tb="' + n + '" class="' + (opt.takebacks === n ? 'on' : '') + '">' + t + '</button>').join('') + '</div>' +
           '<p class="small muted" style="margin:6px 2px 12px">' + (opt.takebacks ? 'Take back your last move whenever you like – no need to ask. ' + (opt.takebacks < 0 ? 'As many times as you want.' : 'Each player gets ' + opt.takebacks + '.') : 'No taking back moves.') + '</p>' +
           '<p class="small muted" style="margin:0 2px">You’re only matched with players who chose the same. ' + (casual() ? '<b>These games are casual – your rating doesn’t change.</b>' : 'Picking a color can take longer to find a game.') + '</p>' +
@@ -161,7 +162,7 @@
     };
     iv = setInterval(tick, 500);
     const offs = [Net.on('state', netLine), Net.on('seeking', () => { seeking = true; }), Net.on('unseeked', () => { seeking = false; draw(); })];
-    el.addEventListener('change', e => { if (e.target.id === 'opt-ratings') opt.ratings = e.target.checked; if (/^opt-/.test(e.target.id)) draw(); });
+    el.addEventListener('change', e => { if (e.target.id === 'opt-ratings') opt.ratings = e.target.checked; if (e.target.id === 'opt-shared') opt.shared = e.target.checked; if (/^opt-/.test(e.target.id)) draw(); });
     el.addEventListener('click', e => {
       const b = e.target.closest('[data-tc]'); if (b) { tc = b.dataset.tc; return draw(); }
       const col = e.target.closest('[data-color]'); if (col && !seeking) { opt.color = col.dataset.color; return draw(); }
@@ -216,17 +217,21 @@
   /* ---------- bots ---------- */
   function bots(el, params) {
     let sel = findBot(Store.data.lastBot) || BOTS[1], color = Store.data.lastColor || 'r', saved = Store.data.coachLevel || (Store.data.coachOn === false ? 'off' : 'normal'),
-      coach = params.coach ? (saved === 'off' ? 'beginner' : saved) : saved;   // off | beginner | normal | extreme
+      coach = params.coach ? (saved === 'off' ? 'beginner' : saved) : saved,   // off | beginner | normal | extreme
+      clock = Store.data.lastBotTc || 'none';
+    const CLOCKS = [['none', 'No clock'], ['1+0', '1 | 0'], ['2+1', '2 | 1'], ['3+0', '3 | 0'], ['3+2', '3 | 2'], ['5+0', '5 | 0'], ['10+0', '10 | 0'], ['15+10', '15 | 10']];
     const match = goodMatch();
     const draw = () => {
       el.innerHTML = top('Play a bot') + '<div class="page" style="padding-top:4px">' +
-        '<div class="card row gap" style="align-items:flex-start"><span class="av" style="width:72px;height:72px">' + sel.faceSvg + '</span><div class="grow"><h2 style="margin:0">' + esc(sel.name) + ' <span class="muted" style="font-size:16px">' + sel.rating + '</span></h2><p class="muted small" style="margin:4px 0 0">' + esc(sel.blurb) + '</p>' +
+        '<div class="card row gap" style="align-items:flex-start"><span class="av" style="width:72px;height:72px">' + sel.faceSvg + '</span><div class="grow"><h2 style="margin:0">' + (sel.title ? '<span class="title-badge">' + esc(sel.title) + '</span> ' : '') + esc(sel.name) + ' <span class="muted" style="font-size:16px">' + sel.rating + '</span></h2><p class="muted small" style="margin:4px 0 0">' + esc(sel.blurb) + '</p>' +
+        (sel.title ? '<p class="disclaimer">' + esc(TITLE_NOTE) + '</p>' : '') +
         (Store.data.beaten[sel.id] ? '<span class="chip acc" style="margin-top:6px">Beaten ✓</span>' : '') + (sel.mine ? '<button class="btn sm" style="margin-top:8px" data-a="editbot">Edit bot</button>' : '') + '</div></div>' +
         (params.startFen ? '<p class="small muted" style="margin:10px 2px">Starting from the position you set up.</p>' : '') +
         '<div class="row gap" style="margin:12px 2px 0"><span class="muted small grow">Your bot rating' + (Store.data.botRating.games ? '' : ' – win or lose a game without help to get one') + '</span><b>' + botR() + '</b></div>' +
-        '<div class="bot-grid" style="margin-top:12px">' + BOTS.map(b => '<button class="bot-card' + (b === sel ? ' on' : '') + '" data-bot="' + b.id + '">' + (Store.data.beaten[b.id] ? '<span class="won">✓</span>' : '') + '<span class="av" style="width:52px;height:52px">' + b.faceSvg + '</span><div class="nm">' + esc(b.name) + '</div><div class="rt">' + b.rating + '</div>' + (b === match ? '<div class="match">Good match</div>' : '') + '</button>').join('') + '</div>' +
+        '<div class="bot-grid" style="margin-top:12px">' + BOTS.map(b => '<button class="bot-card' + (b === sel ? ' on' : '') + '" data-bot="' + b.id + '">' + (Store.data.beaten[b.id] ? '<span class="won">✓</span>' : '') + '<span class="av" style="width:52px;height:52px">' + b.faceSvg + '</span><div class="nm">' + (b.title ? '<span class="title-badge">' + esc(b.title) + '</span> ' : '') + esc(b.name) + '</div><div class="rt">' + b.rating + '</div>' + (b === match ? '<div class="match">Good match</div>' : '') + '</button>').join('') + '</div>' +
         myBotsHtml() +
         '<div class="tc-label">I play</div><div class="seg">' + [['w', 'White'], ['r', 'Random'], ['b', 'Black']].map(([k, n]) => '<button data-color="' + k + '" class="' + (color === k ? 'on' : '') + '">' + n + '</button>').join('') + '</div>' +
+        '<div class="tc-label">Clock</div><div class="tc-grid clock-grid">' + CLOCKS.map(([k, n]) => '<button data-botclock="' + k + '" class="' + (clock === k ? 'on' : '') + '">' + n + (k === 'none' ? '' : '<small>' + catOf(k) + '</small>') + '</button>').join('') + '</div>' +
         coachPick() +
         '<button class="btn primary big" style="margin-top:16px" data-a="play">Play ' + esc(sel.name) + '</button></div>';
     };
@@ -284,13 +289,15 @@
       if (e.target.closest('[data-a="newbot"]')) return botEditor(null);
       if (e.target.closest('[data-a="editbot"]')) return botEditor(sel.id);
       const c = e.target.closest('[data-color]'); if (c) { color = c.dataset.color; return draw(); }
+      const ck = e.target.closest('[data-botclock]'); if (ck) { clock = ck.dataset.botclock; return draw(); }
       const lv = e.target.closest('[data-coachlv]');
       if (lv) { if (lv.dataset.coachlv === 'extreme' && !Coach.extremeOpen().open) return toast('Finish ' + Coach.extremeOpen().left + ' more games to unlock Extreme coaching'); coach = lv.dataset.coachlv; return draw(); }
       if (e.target.closest('[data-a="play"]')) {
-        Store.data.lastBot = sel.id; Store.data.lastColor = color; Store.data.coachLevel = coach; Store.save();
+        Store.data.lastBot = sel.id; Store.data.lastColor = color; Store.data.coachLevel = coach; Store.data.lastBotTc = clock; Store.save();
         let mine = color;
         if (params.startFen) mine = color === 'r' ? new Chess.Game(params.startFen).turn : color;
-        Play.startBot(sel, mine, { startFen: params.startFen, coach: coach === 'off' ? null : coach });
+        const tc = clock === 'none' ? null : (([b, i]) => ({ base: b * 60000, inc: i * 1000 }))(clock.split('+').map(Number));
+        Play.startBot(sel, mine, { startFen: params.startFen, coach: coach === 'off' ? null : coach, tc });
       }
     });
     back(el); draw();
@@ -427,6 +434,7 @@
   function settingsHtml(full) {
     const s = S();
     return '<div class="section-title" style="margin-top:4px">Board</div><div class="row wrap gap">' + BOARDS.map(([k, n, l, d]) => '<button data-boardtheme="' + k + '" style="border:2px solid ' + (s.board === k ? 'var(--accent)' : 'transparent') + ';border-radius:12px;padding:4px;background:var(--card2)"><span style="display:grid;grid-template-columns:1fr 1fr;width:46px;height:46px;border-radius:8px;overflow:hidden"><i style="background:' + l + '"></i><i style="background:' + d + '"></i><i style="background:' + d + '"></i><i style="background:' + l + '"></i></span><div class="tiny" style="margin-top:3px">' + n + '</div></button>').join('') + '</div>' +
+      piecesHtml() +
       '<div class="list" style="margin-top:12px">' + TOGGLES.map(([k, n]) => '<label class="item"><span class="grow">' + n + '</span><span class="switch"><input type="checkbox" data-set="' + k + '"' + (s[k] ? ' checked' : '') + '><span></span></span></label>').join('') + '</div>' +
       '<div class="tc-label">Piece animation</div><div class="seg">' + [[0, 'Off'], [120, 'Fast'], [200, 'Normal'], [320, 'Slow']].map(([v, n]) => '<button data-anim="' + v + '" class="' + (s.anim === v ? 'on' : '') + '">' + n + '</button>').join('') + '</div>' +
       '<div class="tc-label">App theme</div><div class="seg">' + [['dark', 'Dark'], ['light', 'Light']].map(([v, n]) => '<button data-apptheme="' + v + '" class="' + (s.theme === v ? 'on' : '') + '">' + n + '</button>').join('') + '</div>' +
@@ -435,9 +443,19 @@
         '<div class="section-title">Your data</div><div class="list"><button class="item" data-a="pgns"><span class="grow">Copy all my games (PGN)</span><span class="small muted">' + Store.data.games.length + '</span></button><button class="item" data-a="export"><span class="grow">Copy a backup of my data</span></button><button class="item" data-a="import"><span class="grow">Restore from a backup</span></button><button class="item" data-a="reset"><span class="grow bad">Reset everything on this device</span></button></div>' +
         '<p class="faint small center" style="margin-top:18px">Rooftop Chess ' + VERSION + ' · pieces, characters and puzzles made for this app</p>' : '');
   }
+  /* piece styles: the built-in ones, your drawn sets, and a button to draw one */
+  function piecesHtml() {
+    const s = S(), sets = Store.data.pieceSets || [], mine = sets.find(x => x.id === s.pieces);
+    const pick = (id, name, set) => '<button class="piece-pick' + (s.pieces === id ? ' on' : '') + '" data-pieces="' + esc(id) + '"><span class="pp"><i style="background-image:url(\'' + PIECES.preview('wN', id, set) + '\')"></i><i style="background-image:url(\'' + PIECES.preview('bQ', id, set) + '\')"></i></span><span class="tiny ellipsis">' + esc(name) + '</span></button>';
+    return '<div class="section-title">Pieces</div><div class="piece-row">' + PIECES.STYLES.map(([k, n]) => pick(k, n)).join('') + sets.map(x => pick(x.id, x.name, x)).join('') +
+      (sets.length < 5 ? '<button class="piece-pick new" data-a="drawpieces"><span class="pp plus">✎</span><span class="tiny">Draw your own</span></button>' : '') + '</div>' +
+      (mine ? '<button class="btn sm" style="margin-top:8px" data-editpieces="' + esc(mine.id) + '">Edit “' + esc(mine.name) + '”</button>' : '');
+  }
   function bindSettings(root, redraw, onChange) {
     root.addEventListener('click', e => {
       const s = S();
+      const pc = e.target.closest('[data-pieces]'); if (pc) { s.pieces = PIECES.use(pc.dataset.pieces, Store.data.pieceSets); Store.save(); redraw(); onChange && onChange(); return; }
+      const dp = e.target.closest('[data-a="drawpieces"],[data-editpieces]'); if (dp) { UI.closeSheet(); return App.go('drawpieces', { id: dp.dataset.editpieces || null }); }
       const b = e.target.closest('[data-boardtheme]'); if (b) { s.board = b.dataset.boardtheme; applyLook(); Store.save(); redraw(); onChange && onChange(); return; }
       const an = e.target.closest('[data-anim]'); if (an) { s.anim = +an.dataset.anim; Store.save(); redraw(); onChange && onChange(); return; }
       const th = e.target.closest('[data-apptheme]'); if (th) { s.theme = th.dataset.apptheme; applyLook(); Store.save(); redraw(); return; }
@@ -473,6 +491,7 @@
     d.dataset.theme = s.theme; d.dataset.board = s.board;
     document.body.classList.toggle('nolast', !s.lastMove); document.body.classList.toggle('bigclock', !!s.bigClock);
     Sound.enabled = s.sound; Sound.vibrate = s.vibrate !== false;
+    if (PIECES.style !== s.pieces) s.pieces = PIECES.use(s.pieces, Store.data.pieceSets);
     const m = $('meta[name="theme-color"]'); if (m) m.content = s.theme === 'light' ? '#f2f0ea' : '#15181d';
   }
 
@@ -522,6 +541,7 @@
     puzzles: el => Puzzles.screenHome(el), puzzle: (el, p) => Puzzles.screenSolve(el, p), rush: el => Puzzles.screenRush(el),
     learn: el => Learn.screenLearn(el), lesson: (el, p) => Learn.screenLesson(el, p), drill: (el, p) => Learn.screenDrill(el, p),
     analysis: (el, p) => Analysis.screenAnalysis(el, p), review: (el, p) => Analysis.screenReview(el, p), editor: (el, p) => Analysis.screenEditor(el, p),
+    drawpieces: (el, p) => PieceEditor.screen(el, p),
   };
 
   /* ---------- start ---------- */

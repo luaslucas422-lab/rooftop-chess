@@ -99,6 +99,22 @@ let S = null;
   const UW = ua.you === 'w' ? a : b;
   for (let i = 0; i < 5; i++) { UW.send({ t: 'move', id: ua.id, uci: 'e2e4', ply: 0 }); await a.next('move'); await b.next('move'); UW.send({ t: 'takeback', id: ua.id }); assert.strictEqual((await UW.next('game')).takebacksLeft[ua.you === 'w' ? 'w' : 'b'], -1); }
   UW.send({ t: 'abort', id: ua.id }); await a.next('end'); await b.next('end');
+  // a shared clock: one time for both players (only with others who chose it; casual)
+  a.inbox.length = 0; b.inbox.length = 0;
+  a.send({ t: 'seek', tc: '3+2', shared: true }); b.send({ t: 'seek', tc: '3+2' }); await a.next('seeking'); await b.next('seeking'); await wait(1500);
+  assert(!a.inbox.some(m => m.t === 'game'), 'a shared clock is only paired with a shared clock');
+  b.send({ t: 'seek', tc: '3+2', shared: true }); await b.next('seeking');
+  const sh = await a.next('game'); await b.next('game'); assert.strictEqual(sh.shared, true); assert.strictEqual(sh.rated, false);
+  const SW = sh.you === 'w' ? a : b, SB = SW === a ? b : a, shMoves = [[SW, 'e2e4'], [SB, 'e7e5'], [SW, 'g1f3'], [SB, 'b8c6']];
+  let shClock = null;
+  for (let i = 0; i < shMoves.length; i++) {
+    if (i >= 2) await wait(300);
+    shMoves[i][0].send({ t: 'move', id: sh.id, uci: shMoves[i][1], ply: i }); const mv = await a.next('move'); await b.next('move');
+    assert.strictEqual(mv.clock[0], mv.clock[1], 'both sides always show the same time'); shClock = mv.clock[0];
+  }
+  // two moves of ~300 ms thinking each, each followed by the 2 s increment, come off the one clock
+  assert(shClock > 180000 + 4000 - 900 && shClock < 180000 + 4000 - 450, 'shared clock after two timed moves: ' + shClock);
+  SW.send({ t: 'resign', id: sh.id }); assert.strictEqual((await a.next('end')).ratings, null); await b.next('end');
   // no takebacks in a game that wasn't set up for them
   a.inbox.length = 0; b.inbox.length = 0;
   a.send({ t: 'seek', tc: '5+0', color: 'b' }); b.send({ t: 'seek', tc: '5+0' }); await a.next('seeking'); await b.next('seeking');
